@@ -106,3 +106,16 @@ test('billing: a user without credits is told plainly (test accounts have none)'
   await alice!.page.getByRole('button', { name: 'Add project' }).click()
   await expect(alice!.page.getByText(/out of credits/)).toBeVisible({ timeout: 20_000 })
 })
+
+test("digest: generated on demand for free; emailing it bills the clicker, not the owner", async ({ users }) => {
+  const [alice] = await users(['Alice'])
+  const teamName = `Digest ${Date.now().toString(36)}`
+  await createTeam(alice!, teamName)
+  const panel = alice!.page.getByTestId('digests-panel')
+  await panel.getByRole('button', { name: "Generate today's digest" }).click()
+  await expect(panel.getByTestId('digest')).toHaveCount(1, { timeout: 15_000 })
+  await expect(panel.getByTestId('digest')).toContainText('created the team')
+  // Test accounts have no credits, so a user-billed send is refused — proof the owner isn't paying.
+  await panel.getByRole('button', { name: 'Email me' }).click()
+  await expect(alice!.page.getByText(/out of credits/)).toBeVisible({ timeout: 20_000 })
+})

@@ -16,7 +16,8 @@ import { resetGoalForRetry, runPlanner, type PlannerDeps } from '../server/core/
 import { makeOps, userModel } from '../server/core/runtime'
 import { seedDevFixture } from '../server/core/fixtures'
 import { exportPlan, loadSample, sampleAvailable } from '../server/core/sample'
-import { isCreditError, NO_CREDITS_MESSAGE } from '../server/core/integration'
+import { emailDigestToSelf, generateTodaysDigest } from '../server/core/digest'
+import { callIntegration, isCreditError, NO_CREDITS_MESSAGE } from '../server/core/integration'
 import { OpsError } from '../server/core/store'
 
 type Ctx = ActionContext<Env>
@@ -63,9 +64,24 @@ export const actions: Record<string, ActionHandler<Env>> = {
 
   joinTeam: action(({ env, userId, callerJwt, params }) => makeOps(env, userId, undefined, callerJwt).joinTeam(params.code)),
 
-  setDigestOptIn: action(({ env, userId, callerJwt, params }) =>
-    makeOps(env, userId, undefined, callerJwt).setDigestOptIn(str(params.teamId), params.on === true),
+  /** Build (or refresh) today's digest for a team from its activity. Free. */
+  generateDigest: action(({ env, userId, callerJwt, params }) =>
+    generateTodaysDigest(makeOps(env, userId, undefined, callerJwt), str(params.teamId)),
   ),
+
+  /** Email a digest to the caller's own address, billed to the caller (decision #18). */
+  emailDigest: action(async ({ env, userId, callerJwt, params }) => {
+    const ops = makeOps(env, userId, undefined, callerJwt)
+    return emailDigestToSelf(
+      ops,
+      str(params.digestId),
+      await ops.myEmail(),
+      async (msg) => {
+        await callIntegration(env, { kind: 'user', jwt: callerJwt }, 'email/send', msg)
+      },
+      `https://${env.APP_NAME}.app.space`,
+    )
+  }),
 
   createProject: action(({ env, userId, callerJwt, params }) =>
     makeOps(env, userId, callerJwt).createProject(str(params.teamId), params.repo),

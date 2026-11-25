@@ -40,6 +40,11 @@ Status: ✅ done · 🔨 in progress · ⬜ not started · ⚠️ changed (see P
 
 ## Plan changes (newest first)
 
+- **Decision #18 (owner chose option 3):** digest emails are on demand ("Email me", sent only to the
+  caller's own address, billed to them, 5/day) plus a free "Generate today's digest" button. The
+  scheduled digest no longer sends email; `setDigestOptIn` and the opt-in switch are removed (the
+  `digestOptIn` column stays, unused). Nothing in the app bills the owner any more.
+
 - **Phase 10 (live), 2026-11-25:** first deploy latched GitHub `wilyan09007/deepspace_project` as the
   permanent source. Billed steps ran as the owner through the CLI's cached token
   (`~/.deepspace/token`, written from `DEEPSPACE_SESSION`): sample capture 13 credits (planner
@@ -149,7 +154,7 @@ undocumented: parse defensively and log the first real response in phase 10.
 ### Phase 8 — UI routes (`src/pages/(app)/(protected)/`)
 
 `/teams` (list, create, join by code) · `/join/[code]` · `/t/[teamId]` (projects, members, invite link,
-digests, email opt-in) · `/t/[teamId]/p/[projectId]` (board) · `/t/[teamId]/p/[projectId]/connect`.
+digests with Generate / Email me) · `/t/[teamId]/p/[projectId]` (board) · `/t/[teamId]/p/[projectId]/connect`.
 Landing at `src/pages/index.tsx` (static). Board panes: goal picker + new goal; task columns
 (Ready / Working / Paused-Blocked / Done) with overlap badges; agents list with directive buttons;
 questions with answer box; overlaps with acknowledge/resolve; live activity feed; Run demo / Stop.
@@ -160,7 +165,7 @@ questions with answer box; overlaps with acknowledge/resolve; live activity feed
   scaffold/register a probe app). Storage 1 GiB.
 - Rule: build everything first, then test with the fewest billed calls. `integrations list/info`
   are free; `invoke` is billed. Prefer local unit tests and `dev start`.
-- Only owner-paid cost in the product: digest emails, opt-in, ≤ 3/day.
+- No owner-paid cost in the product (decision #18).
 
 ## SDK facts learned (verified in node_modules/deepspace 0.44.2)
 

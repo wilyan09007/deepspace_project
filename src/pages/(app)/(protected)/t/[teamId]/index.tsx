@@ -2,10 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useUser } from 'deepspace'
 import { ArrowRight, Copy, FlaskConical, GitBranch, Mail } from 'lucide-react'
-import { Button, Input, Label, Switch, useToast } from '@/components/ui'
+import { Button, Input, Label, useToast } from '@/components/ui'
 import { Crumbs, Loading, Mono, Page, Panel } from '@/components/conductor/Page'
 import { useAction } from '@/lib/actions'
-import { timeAgo, type Digest, type Member, type Project, type Team } from '@/lib/conductor'
+import type { Digest, Member, Project, Team } from '@/lib/conductor'
 
 export default function TeamPage() {
   const { teamId = '' } = useParams()
@@ -118,17 +118,43 @@ export default function TeamPage() {
             )}
           </Panel>
 
-          <Panel title="Daily digests">
+          <Panel
+            title="Daily digests"
+            testId="digests-panel"
+            action={
+              <Button size="sm" variant="secondary" onClick={() => run('generateDigest', { teamId })} disabled={pending === 'generateDigest'}>
+                {pending === 'generateDigest' ? 'Generating…' : "Generate today's digest"}
+              </Button>
+            }
+          >
             {digests.length === 0 ? (
-              <p className="text-sm text-muted-foreground">A summary of each day's work appears here at 22:00 UTC on days with activity.</p>
+              <p className="text-sm text-muted-foreground">A summary of each day's work is posted here at 22:00 UTC on days with activity, or whenever someone generates it. Free.</p>
             ) : (
-              <div className="space-y-4">
-                {digests.map((d) => (
-                  <article key={d.recordId}>
-                    <h3 className="text-xs font-semibold text-muted-foreground">{d.data.date}</h3>
-                    <pre className="mt-1 whitespace-pre-wrap font-sans text-sm leading-relaxed">{d.data.body.split('\n').slice(1).join('\n').trim()}</pre>
-                  </article>
-                ))}
+              <div className="space-y-5">
+                {digests.map((d) => {
+                  const sent = (d.data.sentTo ?? []).includes(user?.id ?? '')
+                  return (
+                    <article key={d.recordId} data-testid="digest">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-xs font-semibold text-muted-foreground">{d.data.date}</h3>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={async () => {
+                            const res = await run<{ sentTo: string }>('emailDigest', { digestId: d.recordId })
+                            if (res) success('Digest sent', `Emailed to ${res.sentTo}`)
+                          }}
+                          disabled={pending === 'emailDigest'}
+                          title="Sends this digest to your own email. Uses about 1.3¢ of your DeepSpace credits."
+                        >
+                          <Mail /> {sent ? 'Email me again' : 'Email me'}
+                        </Button>
+                      </div>
+                      <pre className="mt-1 whitespace-pre-wrap font-sans text-sm leading-relaxed">{d.data.body.split('\n').slice(1).join('\n').trim()}</pre>
+                    </article>
+                  )
+                })}
+                <p className="text-xs text-muted-foreground">“Email me” sends a digest to your own address and uses about 1.3¢ of your DeepSpace credits.</p>
               </div>
             )}
           </Panel>
@@ -164,20 +190,6 @@ export default function TeamPage() {
             </div>
           </Panel>
 
-          <Panel title={<span className="flex items-center gap-2"><Mail className="h-4 w-4" aria-hidden />Digest email</span>}>
-            <label className="flex items-center justify-between gap-3 text-sm">
-              <span>Email me the daily digest</span>
-              <Switch
-                checked={mine?.data.digestOptIn === 1}
-                onCheckedChange={(on: boolean) => run('setDigestOptIn', { teamId, on })}
-                aria-label="Email me the daily digest"
-              />
-            </label>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Emails are limited to a few per day across the whole app, so on busy days some may not go out. The digest is always on this page.
-            </p>
-          </Panel>
-          {digests[0] && <p className="text-xs text-muted-foreground">Last digest {timeAgo(digests[0].createdAt)}.</p>}
         </div>
       </div>
     </Page>

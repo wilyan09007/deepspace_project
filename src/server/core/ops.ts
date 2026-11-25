@@ -56,7 +56,6 @@ export interface Member {
   role: 'owner' | 'member'
   userName?: string
   userImage?: string
-  digestOptIn?: number
 }
 export interface Invite {
   teamId: string
@@ -334,6 +333,12 @@ export class Ops {
     return name
   }
 
+  /** The caller's own email: their users row, else their verified sign-in token. */
+  async myEmail(): Promise<string | undefined> {
+    const row = await this.store.get<{ email?: string }>('users', this.userId)
+    return row?.data.email || this.self?.email || undefined
+  }
+
   /** Fixed-window counter; throws `rate_limited` once `limit` is reached. */
   async bump(bucket: string, limit: number, windowKey = dayKey(this.now()), subject = this.userId): Promise<number> {
     const key = `${bucket}:${subject}:${windowKey}`
@@ -376,7 +381,6 @@ export class Ops {
       role: 'owner',
       userName: await this.userName(),
       userImage: clip(userRow?.data.imageUrl ?? userRow?.data.image ?? this.self?.image, 500),
-      digestOptIn: 0,
     })
     await this.log({ teamId, kind: 'team', message: `created the team “${teamName}”` })
     return { teamId }
@@ -411,18 +415,12 @@ export class Ops {
       status: 'active',
       role: 'member',
       userName: await this.userName(),
-      digestOptIn: 0,
     }
     const [old] = await this.store.query<Member>('team_members', { teamId, userId: this.userId })
     if (old) await this.store.update<Member>('team_members', old.recordId, { ...fields, role: old.data.role })
     else await this.store.create<Member>('team_members', fields)
     await this.log({ teamId, kind: 'team', message: 'joined the team' })
     return { teamId, alreadyMember: false }
-  }
-
-  async setDigestOptIn(teamId: string, on: boolean): Promise<void> {
-    const m = await this.requireMember(teamId)
-    await this.store.update<Member>('team_members', m.recordId, { digestOptIn: on ? 1 : 0 })
   }
 
   // ── Projects ────────────────────────────────────────────────────────────

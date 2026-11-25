@@ -1,8 +1,9 @@
 /**
- * Scheduled tasks (AppCronRoom in worker.ts). Both run as the app owner:
- * - stale-sweep: marks agents that stopped checking in as offline (no billed calls);
- * - daily-digest: AI-free summary per active team; the only owner-paid cost is
- *   the opt-in digest email, capped per day (decisions #15, #16).
+ * Scheduled tasks (AppCronRoom in worker.ts). Both run as the app owner and
+ * make no billed calls:
+ * - stale-sweep: marks agents that stopped checking in as offline;
+ * - daily-digest: AI-free summary per active team, posted to the team page
+ *   (decision #15). Emailing it is a member's own, user-billed action (#18).
  */
 
 import type { CronTask } from 'deepspace/worker'
@@ -10,7 +11,6 @@ import type { Env } from '../worker'
 import { createActionTools } from './server/action-tools'
 import { AGENT_STALE_MS } from './server/core/config'
 import { runDailyDigest } from './server/core/digest'
-import { callIntegration } from './server/core/integration'
 import { sweepStaleAgents } from './server/core/ops'
 import { Store } from './server/core/store'
 
@@ -28,16 +28,7 @@ export async function runTask(name: string, env: Env): Promise<void> {
     return
   }
   if (name === 'daily-digest') {
-    const appUrl = `https://${env.APP_NAME}.app.space`
-    const result = await runDailyDigest(store, now, async (msg) => {
-      // Owner-paid by necessity (no user is signed in during cron) — capped in runDailyDigest.
-      await callIntegration(env, { kind: 'owner' }, 'email/send', {
-        to: msg.to,
-        subject: msg.subject,
-        text: msg.text,
-        html: msg.html,
-      })
-    }, appUrl)
-    console.info(`[cron] daily-digest wrote ${result.digests} digest(s), sent ${result.emails} email(s)`)
+    const result = await runDailyDigest(store, now)
+    console.info(`[cron] daily-digest wrote ${result.digests} digest(s)`)
   }
 }

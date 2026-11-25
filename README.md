@@ -24,7 +24,7 @@ overlaps, and lets anyone on the team steer any agent from one live board.
    agents ask. Agents receive it on their next check-in. Changes show up live for the whole team.
 5. **Finish with a PR.** Agents complete tasks with a pull-request link; its open/merged/closed state
    shows on the board.
-6. **Daily digest** on the team page (and by email for members who opt in).
+6. **Daily digest** on the team page: what finished, what was planned, questions, overlaps and steering, written from the day's activity (no AI). Posted at 22:00 UTC or whenever someone clicks **Generate today's digest**; **Email me** sends one to your own inbox.
 7. **An assistant that stays on topic.** "What is each agent doing?" It answers from your board only,
    refuses everything else, and never steers an agent without your explicit "yes".
 
@@ -58,7 +58,8 @@ input schemas.
 ## Who pays
 
 Every DeepSpace account has its own credits (free accounts get 500 a month = $5). Conductor bills
-**the user who triggers** any AI or GitHub call, using their own sign-in. There is no separate key to set up.
+**the user who triggers** any AI, GitHub or email call, using their own sign-in. There is no separate key to
+set up, and nothing bills the app owner.
 
 | Action | Paid by | Measured cost |
 |---|---|---|
@@ -66,8 +67,8 @@ Every DeepSpace account has its own credits (free accounts get 500 a month = $5)
 | Assistant message | the user chatting | the 18-message red-team run cost 42 credits in all (10 refused by the cheap guard, 8 answered by Sonnet with lookups) |
 | Adding a project, PR status refresh (max once per 10 min per project) | the user | < 1 credit |
 | Demo agents, sample plan, board, agent tools | nobody | free |
-| Daily digest | nobody (written without AI) | free |
-| Digest **email** (opt-in) | the app owner, since no user is signed in during a scheduled job | ~1.3¢ each, hard cap 3/day app-wide |
+| Daily digest (scheduled or generated) | nobody (written without AI) | free |
+| **Email me** a digest | the user who clicks it | ~1.3¢ per email (platform email fee), 5/day per user |
 
 A user who is out of credits gets a plain message saying so.
 

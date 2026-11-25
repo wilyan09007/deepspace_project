@@ -83,7 +83,7 @@ export const conductorSchemas: CollectionSchema[] = [
       select('role', ['owner', 'member']),
       text('userName'),
       text('userImage'),
-      // 1 = this member wants the daily digest by email (decision #16).
+      // Unused since decision #18 (digest emails are on demand); kept so existing rows stay valid.
       num('digestOptIn'),
     ],
     teamField: 'teamId',

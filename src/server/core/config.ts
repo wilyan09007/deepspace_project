@@ -1,6 +1,6 @@
 /**
- * Tunable limits in one place. Owner-paid costs are only the digest emails
- * (decision #16); everything else is billed to the user who triggers it.
+ * Tunable limits in one place. Nothing in the app bills the owner: every
+ * billed call is paid by the user who triggers it (decisions #11, #18).
  */
 
 /** Planner runs per user per UTC day (users pay, but this stops runaway clicks). */
@@ -15,8 +15,8 @@ export const PR_REFRESH_MIN_GAP_MS = 10 * 60 * 1000
 export const PR_REFRESH_MAX_PER_RUN = 10
 /** Agents unseen this long are marked offline by the stale sweep. */
 export const AGENT_STALE_MS = 15 * 60 * 1000
-/** Owner-paid digest emails per UTC day across the whole app. 0 turns emails off. */
-export const DIGEST_EMAIL_DAILY_CAP = 3
+/** Digest emails one user may send themselves per UTC day (billed to them, decision #18). */
+export const DIGEST_EMAILS_PER_USER_PER_DAY = 5
 /** Planner model (billed to the user who plans). */
 export const PLANNER_MODEL = 'claude-sonnet-5-5'
 /** Cheap model for the assistant's topic/injection guard (billed to the user chatting). */

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { runDailyDigest, summarizeDay } from './digest'
+import { emailDigestToSelf, generateTodaysDigest, runDailyDigest, summarizeDay } from './digest'
 import { Ops, type EventRow } from './ops'
 import { Store } from './store'
 import { FakeTools } from './testing/fake-tools'
@@ -10,7 +10,7 @@ const ops = (u: string) => new Ops({ store: new Store(db.as(u)), userId: u, now:
 
 beforeEach(() => {
   db = new FakeTools()
-  for (const u of ['alice', 'bob', 'carol', 'dave']) db.addUser(u, u[0]!.toUpperCase() + u.slice(1))
+  for (const u of ['alice', 'bob', 'carol', 'dave', 'eve']) db.addUser(u, u[0]!.toUpperCase() + u.slice(1))
 })
 
 describe('summarizeDay', () => {
@@ -25,38 +25,48 @@ describe('summarizeDay', () => {
     expect(s.counts).toMatchObject({ finished: 1, planned: 1, overlaps: 1, checkIns: 1 })
     expect(s.text).toContain('1 task(s) finished, 2 agent(s) active')
     expect(s.html).toContain('Core &lt;dev&gt;')
+    const t = summarizeDay('T', '2026-11-25', [{ teamId: 't', kind: 'team', message: 'joined the team', actorName: 'Bob', at: now }, { teamId: 't', kind: 'plan', message: 'set a goal: Dark mode', actorName: 'Ana', at: now }])
+    expect(t.text).toContain('• Bob joined the team')
+    expect(t.text).toContain('• Ana: Dark mode')
   })
 })
 
 describe('runDailyDigest', () => {
-  it('writes one digest per active team per day and caps owner-paid emails app-wide', async () => {
-    // Team 1: alice, bob, carol all opt in. Team 2: dave opts in. Team 3: no activity.
-    const alice = ops('alice')
-    const { teamId: t1 } = await alice.createTeam('One')
-    for (const u of ['bob', 'carol']) await ops(u).joinTeam((await alice.createInvite(t1)).code)
-    for (const u of ['alice', 'bob', 'carol']) await ops(u).setDigestOptIn(t1, true)
+  it('writes one digest per active team per day, refreshes it, and sends nothing', async () => {
+    const { teamId: t1 } = await ops('alice').createTeam('One')
     const { teamId: t2 } = await ops('dave').createTeam('Two')
-    await ops('dave').setDigestOptIn(t2, true)
     const quiet = await ops('dave').createTeam('Quiet')
     for (const e of db.all('events')) if (e.data.teamId === quiet.teamId) db.rows.delete(e.recordId)
-
-    const sent: string[] = []
     const store = new Store(db.as('owner'))
-    const r1 = await runDailyDigest(store, now, async (m) => { sent.push(m.to) }, 'https://conductor.app.space', 3)
-    expect(r1).toEqual({ digests: 2, emails: 3 })
-    expect(sent).toHaveLength(3)
+    expect(await runDailyDigest(store, now)).toEqual({ digests: 2 })
     expect(db.all('digests').map((d) => d.data.teamId).sort()).toEqual([t1, t2].sort())
+    // A second run the same day updates rather than duplicates.
+    await ops('alice').createInvite(t1)
+    expect(await runDailyDigest(store, now)).toEqual({ digests: 2 })
+    expect(db.all('digests')).toHaveLength(2)
+  })
+})
 
-    // Running again the same day changes nothing.
-    expect(await runDailyDigest(store, now, async (m) => { sent.push(m.to) }, 'x', 3)).toEqual({ digests: 0, emails: 0 })
-    expect(sent).toHaveLength(3)
+describe('on-demand digests', () => {
+  it('members generate today\'s digest for free; outsiders cannot', async () => {
+    const { teamId } = await ops('alice').createTeam('One')
+    const { digestId } = await generateTodaysDigest(ops('alice'), teamId)
+    expect(db.rows.get(digestId!)!.data.body).toContain('One —')
+    await expect(generateTodaysDigest(ops('eve'), teamId)).rejects.toMatchObject({ code: 'not_member' })
   })
 
-  it('sends nothing when the cap is 0 or sending is unavailable', async () => {
+  it('emails only the caller, records it, and limits sends per day', async () => {
     const { teamId } = await ops('alice').createTeam('One')
-    await ops('alice').setDigestOptIn(teamId, true)
-    const sent: string[] = []
-    expect(await runDailyDigest(new Store(db.as('owner')), now, async (m) => { sent.push(m.to) }, 'x', 0)).toEqual({ digests: 1, emails: 0 })
-    expect(sent).toEqual([])
+    const { digestId } = await generateTodaysDigest(ops('alice'), teamId)
+    const sent: Array<{ to: string; subject: string }> = []
+    const send = async (m: { to: string; subject: string }) => { sent.push(m) }
+    expect(await emailDigestToSelf(ops('alice'), digestId!, 'alice@example.com', send, 'https://c.app.space')).toEqual({ sentTo: 'alice@example.com' })
+    expect(sent[0]).toMatchObject({ to: 'alice@example.com', subject: expect.stringContaining('One') })
+    expect(db.rows.get(digestId!)!.data.sentTo).toEqual(['alice'])
+    await expect(emailDigestToSelf(ops('eve'), digestId!, 'eve@example.com', send, 'x')).rejects.toMatchObject({ code: 'not_found' })
+    await expect(emailDigestToSelf(ops('alice'), digestId!, undefined, send, 'x')).rejects.toMatchObject({ code: 'no_email' })
+    for (let i = 0; i < 4; i++) await emailDigestToSelf(ops('alice'), digestId!, 'alice@example.com', send, 'x')
+    await expect(emailDigestToSelf(ops('alice'), digestId!, 'alice@example.com', send, 'x')).rejects.toMatchObject({ code: 'rate_limited' })
+    expect(sent).toHaveLength(5)
   })
 })

@@ -23,8 +23,9 @@ Open items at the bottom are waiting on the owner.
 | 13 | Teammates join through an **invite link** with a one-time code (7-day expiry) | Owner | Answered 2026-11-25 |
 | 14 | Daily digest **by email and on the board** | Owner | Answered 2026-11-25 |
 | 15 | Digest is written **without AI** (from the day's events) so it costs nothing | Agent, following #11 | A scheduled job has no signed-in user to bill, so an AI digest could only bill the owner |
-| 16 | Digest **emails are the one owner-paid cost**: opt-in per member, at most 3 per day (about 1.3¢ each, so at most ~$1.20/month) | Agent, reconciling #11 with #14 | Scheduled jobs can only bill the owner. Owner can switch emails off by setting the cap to 0 (`DIGEST_EMAIL_DAILY_CAP` in `src/server/core/config.ts`) |
+| 16 | ~~Digest **emails are the one owner-paid cost**: opt-in per member, at most 3 per day (about 1.3¢ each, so at most ~$1.20/month) | Agent, reconciling #11 with #14 | Scheduled jobs can only bill the owner. Owner can switch emails off by setting the cap to 0 (`DIGEST_EMAIL_DAILY_CAP` in `src/server/core/config.ts`)~~ Superseded by #18 |
 | 17 | PR status is refreshed **when a member opens the board** (user-billed, at most once per 10 minutes per project), not by an owner-paid hourly job | Agent, following #11 | Replaces the hourly `pr-refresh` cron in the earlier plan |
+| 18 | **Digest emails are on demand and paid by the clicker.** Each digest on the team page has an "Email me" button that sends it to the clicker's own address, billed to their credits (5/day limit). A free "Generate today's digest" button builds it any time. Replaces #16: nothing in the app bills the owner | Owner | Answered 2026-11-25 (option 3). The scheduled 22:00 UTC digest still posts to the team page, free |
 
 ## Open — waiting on the owner
 
