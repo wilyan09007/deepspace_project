@@ -70,9 +70,9 @@ export type ChatPanelProps = {
 
 const MODEL_STORAGE_KEY = 'deepspace-ai-model'
 const DEFAULT_PROMPTS = [
-  'What can you help with?',
-  'Summarize recent activity',
-  'List my collections',
+  'What is each of my agents doing?',
+  'Are any agents working on the same files?',
+  'Which agent questions are waiting for an answer?',
 ]
 
 const DEFAULT_MODELS: ModelOption[] = listDeepSpaceAgentModels('application').map((model) => ({

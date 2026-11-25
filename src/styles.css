@@ -59,6 +59,14 @@
   --color-info: #3b82f6;
   --color-info-foreground: #ffffff;
 
+  /* Conductor task/agent status hues (overridden per theme in themes.css) */
+  --color-st-ready: #93a1b5;
+  --color-st-working: #3fc7c0;
+  --color-st-paused: #f2b134;
+  --color-st-blocked: #f06464;
+  --color-st-review: #a78bfa;
+  --color-st-done: #4ade80;
+
   /*
    * Shadows — slate (default). Each theme in themes.css tunes these.
    *

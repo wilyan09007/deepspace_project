@@ -44,3 +44,40 @@
   --color-shell: #fafafa;
   --color-shell-panel: #ffffff;
 }
+
+/* Console — Conductor's theme: an ink-blue control room with an amber
+ * "on air" signal for anything that needs a human. */
+[data-theme="console"] {
+  color-scheme: dark;
+  --color-background: #0b0f15;
+  --color-foreground: #e6ebf2;
+  --color-card: #111823;
+  --color-card-foreground: #e6ebf2;
+  --color-popover: #131b27;
+  --color-popover-foreground: #e6ebf2;
+  --color-primary: #f2b134;
+  --color-primary-foreground: #1a1204;
+  --color-secondary: #18212e;
+  --color-secondary-foreground: #e6ebf2;
+  --color-muted: #18212e;
+  --color-muted-foreground: #93a1b5;
+  --color-accent: #1e2a3a;
+  --color-accent-foreground: #e6ebf2;
+  --color-destructive: #f06464;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #223044;
+  --color-input: #2a3a51;
+  --color-ring: #f2b134;
+  --radius: 0.625rem;
+  --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
+  --shadow-card-hover: 0 4px 14px 0 rgba(0, 0, 0, 0.45);
+  --color-shell: #0d131b;
+  --color-shell-panel: #111823;
+  /* Conductor status hues (task / agent states). */
+  --color-st-ready: #93a1b5;
+  --color-st-working: #3fc7c0;
+  --color-st-paused: #f2b134;
+  --color-st-blocked: #f06464;
+  --color-st-review: #a78bfa;
+  --color-st-done: #4ade80;
+}
