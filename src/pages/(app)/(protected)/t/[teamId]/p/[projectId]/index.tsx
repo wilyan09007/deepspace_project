@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useUser } from 'deepspace'
 import { Bot, ExternalLink, FlaskConical, Loader2, Plug, Plus, RotateCcw, Sparkles, Square, X } from 'lucide-react'
 import { Button, Input, Label, Modal, Textarea, buttonVariants } from '@/components/ui'
 import { ChatPanel } from '@/components/ChatPanel'
 import { ActivityFeed, AgentsPanel, OverlapsPanel, QuestionsPanel, TaskCard, TaskDetail } from '@/components/conductor/Board'
+import { GithubPanel } from '@/components/conductor/GithubPanel'
 import { Crumbs, Loading, Page, Panel } from '@/components/conductor/Page'
 import { useAction } from '@/lib/actions'
 import {
@@ -38,7 +39,15 @@ export default function BoardPage() {
   const project = projects.find((p) => p.recordId === projectId)
   const [pickedGoal, setPickedGoal] = useState<string | null>(null)
   const [newGoalOpen, setNewGoalOpen] = useState(false)
-  const [openTask, setOpenTask] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [openTask, setOpenTaskState] = useState<string | null>(() => searchParams.get('task'))
+  // ?task=<id> (used by links in mirrored GitHub issues) opens that task.
+  const setOpenTask = (id: string | null) => {
+    setOpenTaskState(id)
+    if (id) searchParams.set('task', id)
+    else searchParams.delete('task')
+    setSearchParams(searchParams, { replace: true })
+  }
   const [askOpen, setAskOpen] = useState(false)
   const [, setTick] = useState(0)
 
@@ -183,6 +192,11 @@ export default function BoardPage() {
               <QuestionsPanel questions={questions} agents={agents} run={run} />
             </Panel>
           )}
+          {!isSample && (
+            <Panel title="GitHub" testId="github-section">
+              <GithubPanel project={project} tasks={tasks} run={run} pending={pending} onOpenTask={setOpenTask} />
+            </Panel>
+          )}
           <Panel title={<>Overlaps {liveOverlaps.length > 0 && <span className="ml-1 rounded-full bg-st-paused px-1.5 text-[10px] text-black">{liveOverlaps.length}</span>}</>} testId="overlaps-panel">
             <OverlapsPanel overlaps={overlaps} tasks={tasks} agents={agents} run={run} />
           </Panel>
@@ -199,6 +213,7 @@ export default function BoardPage() {
         task={detail}
         agent={detail?.data.agentId ? agents.find((a) => a.recordId === detail.data.agentId) : undefined}
         deps={(detail?.data.dependsOn ?? []).map((d) => tasks.find((t) => t.recordId === d)!).filter(Boolean)}
+        run={run}
         onClose={() => setOpenTask(null)}
       />
       <NewGoalModal

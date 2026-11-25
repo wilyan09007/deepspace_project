@@ -4,7 +4,8 @@
  */
 
 import { useState, type FormEvent } from 'react'
-import { AlertTriangle, CheckCheck, ExternalLink, GitPullRequest, MessageSquareText, Pause, Play, Send, Undo2 } from 'lucide-react'
+import { useQuery } from 'deepspace'
+import { AlertTriangle, Check, CheckCheck, CircleDot, ExternalLink, GitPullRequest, MessageSquareText, Pause, Play, Send, Undo2 } from 'lucide-react'
 import { Button, ConfirmModal, Input, Modal, Textarea } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { AgentChip, Mono } from './Page'
@@ -30,6 +31,27 @@ export function StatusText({ status }: { status: string }) {
 
 const filesOf = (t: Task) => [...new Set([...(t.predictedFiles ?? []), ...(t.touchedFiles ?? [])])]
 
+function GithubChips({ task }: { task: Task }) {
+  const issue = safeGithubUrl(task.issueUrl)
+  const pr = safeGithubUrl(task.prUrl)
+  const prNumber = pr?.match(/\/pull\/(\d+)/)?.[1]
+  return (
+    <>
+      {issue && task.issueNumber && (
+        <a href={issue} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:border-primary/50 hover:text-foreground" title="GitHub issue">
+          <CircleDot className="h-3 w-3" aria-hidden />#{task.issueNumber}
+        </a>
+      )}
+      {pr && (
+        <a href={pr} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()} className={cn('inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] hover:border-primary/50', task.prState === 'merged' ? 'border-st-review/50 text-st-review' : 'border-border text-muted-foreground')} title="Pull request">
+          <GitPullRequest className="h-3 w-3" aria-hidden />
+          {prNumber ? `#${prNumber}` : 'PR'} {task.prState || ''}
+        </a>
+      )}
+    </>
+  )
+}
+
 export function TaskCard({
   task,
   agent,
@@ -44,15 +66,16 @@ export function TaskCard({
   onOpen: () => void
 }) {
   const files = filesOf(task.data)
-  const pr = safeGithubUrl(task.data.prUrl)
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onOpen())}
       data-testid="task-card"
       className={cn(
-        'w-full rounded-lg border bg-background/60 p-3 text-left transition-colors hover:border-primary/40',
-        overlapCount ? 'border-st-paused/50' : 'border-border',
+        'w-full cursor-pointer rounded-lg border bg-background/60 p-3 text-left transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        overlapCount ? 'border-st-paused/50' : task.data.status === 'review' ? 'border-st-review/50' : 'border-border',
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -67,13 +90,12 @@ export function TaskCard({
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <StatusText status={task.data.status} />
         {agent && <AgentChip name={agent.data.name} kind={agent.data.kind} />}
-        {pr && (
-          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-            <GitPullRequest className="h-3 w-3" aria-hidden /> PR {task.data.prState || ''}
-          </span>
-        )}
+        <GithubChips task={task.data} />
       </div>
-      {task.data.status !== 'done' && task.data.lastSummary && (
+      {task.data.reviewNote && task.data.status !== 'done' && (
+        <p className="mt-2 line-clamp-2 text-xs text-st-review">Changes requested: {task.data.reviewNote}</p>
+      )}
+      {task.data.status !== 'done' && !task.data.reviewNote && task.data.lastSummary && (
         <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{task.data.lastSummary}</p>
       )}
       {waitingOn.length > 0 && task.data.status === 'ready' && (
@@ -87,13 +109,19 @@ export function TaskCard({
           {files.length > 3 && <span className="text-[10px] text-muted-foreground">+{files.length - 3}</span>}
         </div>
       )}
-    </button>
+    </div>
   )
 }
 
-export function TaskDetail({ task, agent, deps, onClose }: { task: Rec<Task> | null; agent?: Rec<Agent>; deps: Array<Rec<Task>>; onClose: () => void }) {
+const HISTORY_TONE: Record<string, string> = { review: 'text-st-review', complete: 'text-st-done', directive: 'text-st-paused', github: 'text-primary', assign: 'text-st-working' }
+
+export function TaskDetail({ task, agent, deps, run, onClose }: { task: Rec<Task> | null; agent?: Rec<Agent>; deps: Array<Rec<Task>>; run: Run; onClose: () => void }) {
+  const { records: history } = useQuery<EventRow>('events', { where: { taskId: task?.recordId ?? '__none__' }, orderBy: 'at', orderDir: 'desc', limit: 30 })
+  const [changes, setChanges] = useState('')
+  const [asking, setAsking] = useState(false)
   if (!task) return null
   const pr = safeGithubUrl(task.data.prUrl)
+  const issue = safeGithubUrl(task.data.issueUrl)
   const touched = task.data.touchedFiles ?? []
   return (
     <Modal open onClose={onClose} size="lg">
@@ -103,7 +131,60 @@ export function TaskDetail({ task, agent, deps, onClose }: { task: Rec<Task> | n
           <StatusText status={task.data.status} /> {agent && <>· {agent.data.name}</>} · updated {timeAgo(task.updatedAt)}
         </Modal.Description>
       </Modal.Header>
-      <Modal.Body className="space-y-4 text-sm">
+      <Modal.Body className="max-h-[70vh] space-y-4 overflow-y-auto text-sm" data-testid="task-detail">
+        {(issue || pr) && (
+          <div className="flex flex-wrap gap-2">
+            {issue && (
+              <a href={issue} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs hover:border-primary/50">
+                <CircleDot className="h-3.5 w-3.5" aria-hidden /> Issue #{task.data.issueNumber} <ExternalLink className="h-3 w-3" aria-hidden />
+              </a>
+            )}
+            {pr && (
+              <a href={pr} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs hover:border-primary/50">
+                <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Pull request · {task.data.prState || 'unknown'} <ExternalLink className="h-3 w-3" aria-hidden />
+              </a>
+            )}
+          </div>
+        )}
+
+        {task.data.status === 'review' && (
+          <div className="rounded-lg border border-st-review/50 bg-st-review/5 p-3" data-testid="review-box">
+            <p className="text-xs font-semibold text-st-review">Waiting for review</p>
+            <p className="mt-1 text-xs text-muted-foreground">Check the work{pr ? ' and its pull request' : ''}, then approve it or send it back. Merging the PR also approves it.</p>
+            {asking ? (
+              <form
+                className="mt-2 space-y-2"
+                onSubmit={async (e) => {
+                  e.preventDefault()
+                  if (await run('requestChanges', { taskId: task.recordId, note: changes })) {
+                    setChanges('')
+                    setAsking(false)
+                    onClose()
+                  }
+                }}
+              >
+                <Textarea value={changes} onChange={(e) => setChanges(e.target.value)} rows={2} maxLength={1000} placeholder="What should change?" autoFocus aria-label="What should change?" />
+                <div className="flex gap-2">
+                  <Button size="sm" type="submit" disabled={!changes.trim()}>Send back</Button>
+                  <Button size="sm" type="button" variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
+                </div>
+              </form>
+            ) : (
+              <div className="mt-2 flex gap-2">
+                <Button size="sm" onClick={async () => (await run('approveTask', { taskId: task.recordId })) && onClose()}>
+                  <Check /> Approve
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setAsking(true)}>
+                  <Undo2 /> Request changes
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+        {task.data.reviewNote && task.data.status !== 'done' && task.data.status !== 'review' && (
+          <p className="rounded-lg border border-st-review/40 p-3 text-xs"><span className="font-semibold text-st-review">Changes requested:</span> {task.data.reviewNote}</p>
+        )}
+
         {task.data.body && <p className="whitespace-pre-wrap">{task.data.body}</p>}
         {task.data.acceptance && (
           <div>
@@ -133,17 +214,22 @@ export function TaskDetail({ task, agent, deps, onClose }: { task: Rec<Task> | n
             </ul>
           </div>
         )}
-        {task.data.lastSummary && (
-          <div>
-            <h4 className="text-xs font-semibold uppercase text-muted-foreground">Latest from the agent</h4>
-            <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{task.data.lastSummary}</p>
-          </div>
-        )}
-        {pr && (
-          <a href={pr} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 text-primary hover:underline">
-            <GitPullRequest className="h-4 w-4" aria-hidden /> Pull request ({task.data.prState || 'unknown'}) <ExternalLink className="h-3 w-3" aria-hidden />
-          </a>
-        )}
+        <div>
+          <h4 className="text-xs font-semibold uppercase text-muted-foreground">History</h4>
+          {history.length === 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground">Nothing yet.</p>
+          ) : (
+            <ol className="mt-1 space-y-1.5 border-l border-border pl-3" data-testid="task-history">
+              {history.map((e) => (
+                <li key={e.recordId} className="text-xs leading-relaxed">
+                  <span className="text-muted-foreground">{timeAgo(e.data.at)} · </span>
+                  <span className={cn('font-medium', HISTORY_TONE[e.data.kind])}>{e.data.actorName}</span> {e.data.message}
+                  {e.data.files && e.data.files.length > 0 && <span className="text-muted-foreground"> ({e.data.files.slice(0, 3).join(', ')})</span>}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
       </Modal.Body>
     </Modal>
   )

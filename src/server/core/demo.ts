@@ -8,7 +8,8 @@
  */
 
 import { DEMO_MAX_TICKS } from './config'
-import { type Agent, type Goal, type Ops, type Project, type Question, type Task } from './ops'
+import { rankReadyTasks } from './engine'
+import { toLite, type Agent, type Goal, type Ops, type Project, type Question, type Task } from './ops'
 import { OpsError, type Row } from './store'
 
 export const DEMO_AGENT_NAMES = ['Demo · Ada', 'Demo · Grace', 'Demo · Linus'] as const
@@ -107,6 +108,13 @@ export async function demoTick(ops: Ops, payload: DemoPayload, state: DemoState)
   if (goal.data.demoState !== 'running') return { done: true, reason: 'stopped by a teammate', state: next }
   const goalTasks = await ops.store.query<Task>('tasks', { goalId: payload.goalId })
   if (goalTasks.length && goalTasks.every((t) => t.data.status === 'done')) return { done: true, reason: 'every task is done', state: next }
+  // Nothing in progress and nothing startable: the rest waits on human review.
+  const working = goalTasks.some((t) => ['assigned', 'in_progress', 'blocked', 'paused'].includes(t.data.status))
+  const startable = rankReadyTasks(goalTasks.map(toLite), {}).length > 0
+  if (goalTasks.length && !working && !startable) {
+    const inReview = goalTasks.filter((t) => t.data.status === 'review').length
+    return { done: true, reason: inReview ? `waiting for review — approve the ${inReview} task(s) in Review to unblock the rest` : 'nothing left to start', state: next }
+  }
   if (next.tick > DEMO_MAX_TICKS) return { done: true, reason: 'time limit reached', state: next }
 
   const agentId = payload.agentIds[state.tick % payload.agentIds.length]!

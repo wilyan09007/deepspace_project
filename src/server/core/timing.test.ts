@@ -41,9 +41,9 @@ describe('timing rules', () => {
     const { projectId } = await projectWithTask()
     const { agentId } = await ops('alice').registerAgent(projectId, 'claude')
     clock += AGENT_STALE_MS - MIN
-    expect(await sweepStaleAgents(sys(), clock, AGENT_STALE_MS)).toBe(0)
+    expect((await sweepStaleAgents(ops('owner'), clock, AGENT_STALE_MS)).offline).toBe(0)
     clock += 2 * MIN
-    expect(await sweepStaleAgents(sys(), clock, AGENT_STALE_MS)).toBe(1)
+    expect((await sweepStaleAgents(ops('owner'), clock, AGENT_STALE_MS)).offline).toBe(1)
     expect((db.rows.get(agentId)!.data as unknown as Agent).status).toBe('offline')
     // Checking in again brings it back.
     await ops('alice').checkIn(agentId, { summary: 'back' })

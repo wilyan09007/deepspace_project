@@ -10,7 +10,7 @@
 
 import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { AuthOverlay, useAuthProfileReady, signOut } from 'deepspace'
+import { AuthOverlay, useAuthProfileReady, signOut, useQuery } from 'deepspace'
 import { ChevronDown, LogOut, Menu, X } from 'lucide-react'
 import { APP_NAME } from '../constants'
 import type { Role } from '../constants'
@@ -63,6 +63,7 @@ export default function Navigation() {
         )}
       >
         {item.label}
+        {item.path === '/inbox' && <InboxCount />}
       </Link>
     )
   }
@@ -167,5 +168,18 @@ export default function Navigation() {
 
       {showAuthModal && <AuthOverlay onClose={() => setShowAuthModal(false)} />}
     </>
+  )
+}
+
+/** Reviews + open agent questions across the viewer's teams (team permissions scope the queries). */
+function InboxCount() {
+  const { records: reviews } = useQuery('tasks', { where: { status: 'review' } })
+  const { records: questions } = useQuery('questions', { where: { status: 'open' } })
+  const n = reviews.length + questions.length
+  if (!n) return null
+  return (
+    <span className="ml-1.5 rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground" data-testid="inbox-count" aria-label={`${n} waiting`}>
+      {n}
+    </span>
   )
 }

@@ -192,6 +192,9 @@ describe('agent loop', () => {
     const [row] = db.all('overlaps')
     await ops('bob').setOverlapStatus(row!.recordId, 'acknowledged')
     await ops('alice').completeTask(a1, { summary: 'done' })
+    // Submitted work still overlaps until it's approved (its changes aren't merged yet).
+    expect((db.rows.get(row!.recordId)!.data as unknown as OverlapRow).status).not.toBe('resolved')
+    await ops('bob').approveTask(taskIds[0]!)
     expect((db.rows.get(row!.recordId)!.data as unknown as OverlapRow).status).toBe('resolved')
   })
 
@@ -267,8 +270,8 @@ describe('human steering', () => {
   })
 })
 
-describe('completion', () => {
-  it('keeps only PR links in the project repo and closes the goal when all tasks are done', async () => {
+describe('completion and review', () => {
+  it('submits for review, keeps only PR links in the project repo, and closes the goal on approval', async () => {
     const { projectId, goalId, taskIds } = await seed([
       { title: 'A', files: ['a.ts'] },
       { title: 'B', files: ['b.ts'] },
@@ -279,32 +282,79 @@ describe('completion', () => {
     const bad = await ops('alice').completeTask(a1, { summary: 'did A', prUrl: 'https://github.com/evil/repo/pull/1' })
     expect(bad.prUrl).toBeNull()
     expect(bad.message).toMatch(/ignored/)
-    expect(bad.goalDone).toBe(false)
+    expect(db.rows.get(taskIds[0]!)!.data).toMatchObject({ status: 'review', lastAgentId: a1 })
+    expect(db.rows.get(a1)!.data).toMatchObject({ status: 'idle', currentTaskId: null })
 
     await ops('alice').nextTask(a1)
     const good = await ops('alice').completeTask(a1, { summary: 'did B', prUrl: 'https://github.com/acme/web/pull/7/files' })
     expect(good.prUrl).toBe('https://github.com/acme/web/pull/7')
-    expect(good.goalDone).toBe(true)
+    expect(db.rows.get(taskIds[1]!)!.data).toMatchObject({ status: 'review', prState: 'open' })
+    expect(db.rows.get(goalId)!.data.status).toBe('active')
+
+    expect(await ops('bob').approveTask(taskIds[0]!)).toEqual({ goalDone: false })
+    expect(await ops('bob').approveTask(taskIds[1]!)).toEqual({ goalDone: true })
     expect(db.rows.get(goalId)!.data.status).toBe('done')
-    expect(db.rows.get(taskIds[1]!)!.data).toMatchObject({ status: 'done', prState: 'open' })
-    expect(db.rows.get(a1)!.data).toMatchObject({ status: 'idle', currentTaskId: null })
+    await expect(ops('bob').approveTask(taskIds[1]!)).rejects.toMatchObject({ code: 'not_in_review' })
+    await expect(ops('eve').approveTask(taskIds[0]!)).rejects.toMatchObject({ code: 'not_found' })
     await expectCode(ops('alice').completeTask(a1, {}), 'no_task')
   })
 
-  it('refreshes PR state at most every 10 minutes per project', async () => {
-    const { projectId } = await seed([{ title: 'A', files: ['a.ts'] }])
+  it('request changes sends the task back with the note, to the same agent first', async () => {
+    const { projectId, taskIds } = await seed([
+      { title: 'A', files: ['a.ts'] },
+      { title: 'B', files: ['b.ts'] },
+    ])
     const a1 = (await ops('alice').registerAgent(projectId, 'a1')).agentId
+    const b1 = (await ops('bob').registerAgent(projectId, 'b1')).agentId
     await ops('alice').nextTask(a1)
-    await ops('alice').completeTask(a1, { prUrl: 'https://github.com/acme/web/pull/3' })
-    let calls = 0
-    const gh = { getPullRequest: async () => { calls++; return 'merged' as const } } as unknown as GitHubClient
-    expect(await ops('bob', gh).refreshPrs(projectId)).toEqual({ checked: 1, skipped: null })
-    expect(db.all('tasks')[0]!.data.prState).toBe('merged')
-    expect((await ops('bob', gh).refreshPrs(projectId)).skipped).toBe('throttled')
-    clock += 11 * 60 * 1000
-    expect((await ops('bob', gh).refreshPrs(projectId)).skipped).toBe('none') // merged PRs aren't re-checked
-    expect(calls).toBe(1)
-    await expectCode(ops('eve', gh).refreshPrs(projectId), 'not_found')
+    await ops('alice').completeTask(a1, { summary: 'did A' })
+    await ops('bob').requestChanges(taskIds[0]!, 'Also handle the empty state.')
+    expect(db.rows.get(taskIds[0]!)!.data).toMatchObject({ status: 'ready', agentId: null, lastAgentId: a1, reviewNote: 'Also handle the empty state.' })
+
+    // Bob's agent gets B, even though A comes first in plan order…
+    expect((await ops('bob').nextTask(b1)).task?.taskId).toBe(taskIds[1])
+    // …and a1 gets A back, with the note and the task's history.
+    const back = await ops('alice').nextTask(a1)
+    expect(back.task?.taskId).toBe(taskIds[0])
+    expect(back.task?.reviewNote).toBe('Also handle the empty state.')
+    expect(back.directives.some((d) => d.text.includes('Changes requested'))).toBe(true)
+    expect(back.task?.history?.map((h) => h.kind)).toEqual(expect.arrayContaining(['review', 'complete', 'assign']))
+    await expect(ops('bob').requestChanges(taskIds[0]!, 'x')).rejects.toMatchObject({ code: 'not_in_review' })
+  })
+
+  it('a reassigned task carries its history to the next agent', async () => {
+    const { projectId, taskIds } = await seed([{ title: 'A', files: ['a.ts'] }])
+    const a1 = (await ops('alice').registerAgent(projectId, 'a1')).agentId
+    const b1 = (await ops('bob').registerAgent(projectId, 'b1')).agentId
+    await ops('alice').nextTask(a1)
+    await ops('alice').checkIn(a1, { summary: 'Half done: reducer written, tests missing', files: ['a.ts'] })
+    await ops('bob').sendDirective(a1, 'reassign')
+    const next = await ops('bob').nextTask(b1)
+    expect(next.task?.taskId).toBe(taskIds[0])
+    expect(next.task?.history?.some((h) => h.message.includes('reducer written'))).toBe(true)
+  })
+
+  it('a merged PR approves the task and alerts agents on overlapping files', async () => {
+    const { projectId, taskIds } = await seed([
+      { title: 'Theme', files: ['src/theme.ts'] },
+      { title: 'Toggle', files: ['src/Toggle.tsx'] },
+      { title: 'Docs', files: ['README.md'] },
+    ])
+    const a1 = (await ops('alice').registerAgent(projectId, 'a1')).agentId
+    const b1 = (await ops('bob').registerAgent(projectId, 'b1')).agentId
+    const c1 = (await ops('bob').registerAgent(projectId, 'c1')).agentId
+    await ops('alice').nextTask(a1)
+    await ops('bob').nextTask(b1) // Docs (no overlap)
+    await ops('bob').nextTask(c1) // Toggle
+    await ops('bob').checkIn(c1, { files: ['src/theme.ts'] }) // Toggle also edits theme.ts
+    await ops('alice').completeTask(a1, { prUrl: 'https://github.com/acme/web/pull/9' })
+
+    const gh = { getPullRequest: async () => 'merged' as const } as unknown as GitHubClient
+    await ops('bob', gh).refreshPrs(projectId)
+    expect(db.rows.get(taskIds[0]!)!.data).toMatchObject({ status: 'done', prState: 'merged', mergeAlerted: 1 })
+    const c1Notes = (await ops('bob').checkIn(c1, {})).directives
+    expect(c1Notes.some((d) => d.text.includes('was merged') && d.text.includes('src/theme.ts'))).toBe(true)
+    expect((await ops('bob').checkIn(b1, {})).directives).toEqual([])
   })
 })
 
@@ -314,9 +364,31 @@ describe('stale sweep', () => {
     const a1 = (await ops('alice').registerAgent(projectId, 'a1')).agentId
     const d1 = (await ops('alice').registerAgent(projectId, 'demo', 'demo')).agentId
     clock += 20 * 60 * 1000
-    expect(await sweepStaleAgents(sys(), clock, 15 * 60 * 1000)).toBe(1)
+    expect(await sweepStaleAgents(ops('owner'), clock, 15 * 60 * 1000, 2 * 3600 * 1000)).toEqual({ offline: 1, released: 0 })
     expect((db.rows.get(a1)!.data as unknown as Agent).status).toBe('offline')
     expect((db.rows.get(d1)!.data as unknown as Agent).status).toBe('idle')
+  })
+
+  it('gives back a task held by an agent silent for 2 hours, with a note for when it returns', async () => {
+    const { projectId, taskIds } = await seed([{ title: 'A', files: ['a.ts'] }])
+    const a1 = (await ops('alice').registerAgent(projectId, 'a1')).agentId
+    const b1 = (await ops('bob').registerAgent(projectId, 'b1')).agentId
+    await ops('alice').nextTask(a1)
+    clock += 2 * 3600 * 1000 + 60_000
+    expect(await sweepStaleAgents(ops('owner'), clock, 15 * 60 * 1000, 2 * 3600 * 1000)).toEqual({ offline: 2, released: 1 })
+    expect(db.rows.get(taskIds[0]!)!.data).toMatchObject({ status: 'ready', agentId: null, lastAgentId: a1 })
+    expect(db.all('task_claims')).toHaveLength(0)
+    expect((await ops('bob').nextTask(b1)).task?.taskId).toBe(taskIds[0])
+    expect((await ops('alice').checkIn(a1, {})).directives[0]!.text).toMatch(/went back to Ready/)
+  })
+
+  it('leaves paused work alone', async () => {
+    const { projectId } = await seed([{ title: 'A', files: ['a.ts'] }])
+    const a1 = (await ops('alice').registerAgent(projectId, 'a1')).agentId
+    await ops('alice').nextTask(a1)
+    await ops('bob').sendDirective(a1, 'pause')
+    clock += 3 * 3600 * 1000
+    expect((await sweepStaleAgents(ops('owner'), clock, 15 * 60 * 1000, 2 * 3600 * 1000)).released).toBe(0)
   })
 })
 

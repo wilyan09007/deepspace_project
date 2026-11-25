@@ -11,6 +11,7 @@ import { createDeepSpaceAI } from 'deepspace/worker'
 import type { Env } from '../../../worker'
 import { createActionTools } from '../action-tools'
 import { githubClient } from './github'
+import { preferUserGithub, userGithub } from './github-user'
 import { Ops } from './ops'
 import { Store } from './store'
 
@@ -40,7 +41,8 @@ export function makeOps(env: Env, userId: string, payerJwt?: string, identityJwt
   return new Ops({
     store,
     userId,
-    github: payerJwt ? githubClient(env, { kind: 'user', jwt: payerJwt }) : undefined,
+    // The user's own GitHub connection when they have one (private repos), else the public reader.
+    github: payerJwt ? preferUserGithub(userGithub(env, payerJwt), githubClient(env, { kind: 'user', jwt: payerJwt })) : undefined,
     self: profileFromVerifiedJwt(identityJwt ?? payerJwt),
   })
 }

@@ -34,9 +34,16 @@ export async function callIntegration<T>(env: Env, payer: Payer, endpoint: strin
   if (!target) throw new IntegrationError(endpoint, 'Invalid integration endpoint', 400)
   const jwt = payerJwt(env, payer)
   if (!jwt) throw new IntegrationError(endpoint, 'No credential available to pay for this call', 401, 'no_payer')
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` }
+  // Composio files connections per app: identify this app, as the scaffold's
+  // integration proxy does, or a user's connection is looked up elsewhere.
+  if (target.name === 'composio' && env.APP_IDENTITY_TOKEN) {
+    headers['x-app-identity-token'] = env.APP_IDENTITY_TOKEN
+    headers['x-app-id'] = env.DEEPSPACE_APP_ID
+  }
   const res = await apiWorkerFetch(env, target.path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
+    headers,
     body: JSON.stringify(body ?? {}),
   })
   const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>

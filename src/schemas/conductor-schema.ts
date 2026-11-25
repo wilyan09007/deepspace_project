@@ -63,6 +63,8 @@ export const EVENT_KINDS = [
   'complete',
   'agent',
   'demo',
+  'review',
+  'github',
 ] as const
 
 export const conductorSchemas: CollectionSchema[] = [
@@ -108,6 +110,11 @@ export const conductorSchemas: CollectionSchema[] = [
       select('kind', ['repo', 'sample']),
       // Last user-triggered PR status refresh (decision #17 throttle).
       num('prCheckedAt'),
+      // GitHub sync (decision #19): 1 = mirror tasks as issues; who turned it on; last sync.
+      num('mirrorIssues'),
+      text('mirrorBy'),
+      num('ghSyncedAt'),
+      text('ghSyncError'),
     ],
     teamField: 'teamId',
     permissions: TEAM_READ_ONLY,
@@ -129,6 +136,9 @@ export const conductorSchemas: CollectionSchema[] = [
       // Demo run state: 'running' | 'stopping' | 'stopped' | '' (never run).
       text('demoState'),
       text('planSummary'),
+      // Set when the goal was planned from a GitHub issue.
+      num('sourceIssueNumber'),
+      text('sourceIssueUrl'),
     ],
     teamField: 'teamId',
     permissions: TEAM_READ_ONLY,
@@ -152,6 +162,14 @@ export const conductorSchemas: CollectionSchema[] = [
       text('prUrl'),
       text('prState'),
       num('updatedAtMs'),
+      // GitHub mirror: the task's issue and the status last written to it.
+      num('issueNumber'),
+      text('issueUrl'),
+      text('ghStatus'),
+      // Review gate and handoff: who last held it, review note, merge alert sent.
+      text('lastAgentId'),
+      text('reviewNote'),
+      num('mergeAlerted'),
     ],
     teamField: 'teamId',
     permissions: TEAM_READ_ONLY,
@@ -250,6 +268,28 @@ export const conductorSchemas: CollectionSchema[] = [
     columns: [text('teamId'), text('date'), text('body'), json('sentTo')],
     teamField: 'teamId',
     uniqueOn: ['teamId', 'date'],
+    permissions: TEAM_READ_ONLY,
+  },
+  {
+    // Open issues and PRs read from GitHub during a sync, for the board's GitHub panel.
+    name: 'github_items',
+    columns: [
+      text('teamId'),
+      text('projectId'),
+      text('key'),
+      select('kind', ['issue', 'pr']),
+      num('number'),
+      text('title'),
+      text('url'),
+      text('state'),
+      text('author'),
+      text('linkedTaskId'),
+      num('merged'),
+      text('updatedAtGh'),
+      text('body'),
+    ],
+    teamField: 'teamId',
+    uniqueOn: ['key'],
     permissions: TEAM_READ_ONLY,
   },
   {

@@ -16,6 +16,7 @@ export type {
   Team,
 } from '@/server/core/ops'
 export type { Digest } from '@/server/core/digest'
+export type { GithubItem } from '@/server/core/github-sync'
 
 export const TASK_STATUS: Record<string, { label: string; tone: string }> = {
   ready: { label: 'Ready', tone: 'text-st-ready' },
@@ -23,7 +24,7 @@ export const TASK_STATUS: Record<string, { label: string; tone: string }> = {
   in_progress: { label: 'Working', tone: 'text-st-working' },
   blocked: { label: 'Blocked', tone: 'text-st-blocked' },
   paused: { label: 'Paused', tone: 'text-st-paused' },
-  review: { label: 'Checking', tone: 'text-st-review' },
+  review: { label: 'Review', tone: 'text-st-review' },
   done: { label: 'Done', tone: 'text-st-done' },
 }
 
@@ -45,8 +46,8 @@ export const GOAL_STATUS: Record<string, string> = {
 /** Board columns: which task statuses land in which column. */
 export const COLUMNS = [
   { id: 'ready', title: 'Ready', statuses: ['ready'] },
-  { id: 'active', title: 'In progress', statuses: ['assigned', 'in_progress', 'review', 'blocked'] },
-  { id: 'paused', title: 'Paused', statuses: ['paused'] },
+  { id: 'active', title: 'In progress', statuses: ['assigned', 'in_progress', 'blocked', 'paused'] },
+  { id: 'review', title: 'Review', statuses: ['review'] },
   { id: 'done', title: 'Done', statuses: ['done'] },
 ] as const
 
@@ -64,8 +65,8 @@ export function timeAgo(ms: number | string | undefined, now = Date.now()): stri
 
 export const repoUrl = (p: { repoOwner: string; repoName: string }) => `https://github.com/${p.repoOwner}/${p.repoName}`
 
-/** Only github.com links are rendered as links (agents write these). */
+/** Only github.com repo, issue and PR links are rendered as links (agents and GitHub write these). */
 export function safeGithubUrl(url: string | null | undefined): string | null {
   if (!url) return null
-  return /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(\/pull\/\d+)?$/.test(url) ? url : null
+  return /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(\/(pull|issues)\/\d+)?$/.test(url) ? url : null
 }

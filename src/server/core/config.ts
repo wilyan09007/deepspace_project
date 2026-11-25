@@ -15,6 +15,10 @@ export const PR_REFRESH_MIN_GAP_MS = 10 * 60 * 1000
 export const PR_REFRESH_MAX_PER_RUN = 10
 /** Agents unseen this long are marked offline by the stale sweep. */
 export const AGENT_STALE_MS = 15 * 60 * 1000
+/** Tasks held by an agent silent this long go back to Ready (auto-release, decision #21). */
+export const AGENT_RELEASE_MS = 2 * 60 * 60 * 1000
+/** Minimum gap between automatic GitHub syncs of one project (board opens). */
+export const GITHUB_SYNC_MIN_GAP_MS = 2 * 60 * 1000
 /** Digest emails one user may send themselves per UTC day (billed to them, decision #18). */
 export const DIGEST_EMAILS_PER_USER_PER_DAY = 5
 /** Planner model (billed to the user who plans). */

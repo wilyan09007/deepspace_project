@@ -53,7 +53,7 @@ export function buildAgentTools(context: AgentToolContext<Env>): ToolSet {
         }),
     }),
     next_task: tool({
-      description: 'Get your task. Returns your current task if you have one, otherwise assigns the ready task that overlaps least with other agents. Also returns directives from humans and overlap warnings.',
+      description: 'Get your task. Returns your current task if you have one, otherwise assigns the ready task that overlaps least with other agents. Also returns directives from humans, overlap warnings, the task\'s GitHub issue, how to word your PR so Conductor links it, and — if someone worked on it before or a reviewer sent it back — that history.',
       inputSchema: z.object({ agent_id: agentId }),
       execute: ({ agent_id }) => run(context, (ops) => ops.nextTask(agent_id)),
     }),
@@ -61,7 +61,7 @@ export function buildAgentTools(context: AgentToolContext<Env>): ToolSet {
       description: 'Report progress. Send what you are doing and every file you have edited or are about to edit. Returns directives from humans (obey them), overlap warnings, and answers to your questions.',
       inputSchema: z.object({
         agent_id: agentId,
-        status: z.enum(['working', 'blocked', 'review']).default('working').describe('working, blocked (waiting on something), or review (done, checking)'),
+        status: z.enum(['working', 'blocked']).default('working').describe('working, or blocked (waiting on something)'),
         summary: z.string().max(1000).describe('One or two sentences on what you are doing now.'),
         files: z.array(z.string()).max(50).default([]).describe('Repo-relative paths you edited or are about to edit.'),
       }),
@@ -73,7 +73,7 @@ export function buildAgentTools(context: AgentToolContext<Env>): ToolSet {
       execute: ({ agent_id, question }) => run(context, (ops) => ops.askHuman(agent_id, question)),
     }),
     complete_task: tool({
-      description: 'Mark your current task done. Include the pull request URL if you opened one (it must be a PR in the project repo). Never invent a URL.',
+      description: 'Submit your current task for human review when the work is done. Include the pull request URL if you opened one (it must be a PR in the project repo; never invent a URL). A teammate approves it, or sends it back with notes that next_task will give you first. A merged PR also counts as approval.',
       inputSchema: z.object({
         agent_id: agentId,
         summary: z.string().max(1000).describe('What you changed.'),

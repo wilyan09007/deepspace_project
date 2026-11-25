@@ -72,6 +72,10 @@ export interface Project {
   description?: string
   kind: 'repo' | 'sample'
   prCheckedAt?: number
+  mirrorIssues?: number
+  mirrorBy?: string
+  ghSyncedAt?: number
+  ghSyncError?: string
 }
 export type GoalStatus = 'planning' | 'planned' | 'active' | 'done' | 'failed'
 export interface Goal {
@@ -88,6 +92,8 @@ export interface Goal {
   createdByName?: string
   source?: 'planner' | 'sample'
   demoState?: string
+  sourceIssueNumber?: number
+  sourceIssueUrl?: string
 }
 export type TaskStatus = 'ready' | 'assigned' | 'in_progress' | 'blocked' | 'paused' | 'review' | 'done'
 export interface Task {
@@ -107,6 +113,12 @@ export interface Task {
   prUrl?: string | null
   prState?: string
   updatedAtMs?: number
+  issueNumber?: number | null
+  issueUrl?: string
+  ghStatus?: string
+  lastAgentId?: string | null
+  reviewNote?: string
+  mergeAlerted?: number
 }
 export interface Claim {
   teamId: string
@@ -169,6 +181,8 @@ export type EventKind =
   | 'complete'
   | 'agent'
   | 'demo'
+  | 'review'
+  | 'github'
 export interface EventRow {
   teamId: string
   projectId?: string
@@ -218,7 +232,24 @@ export function inviteCode(length = 8): string {
 const CHECKIN_TO_TASK: Record<string, TaskStatus> = {
   working: 'in_progress',
   blocked: 'blocked',
-  review: 'review',
+  // Older agents may still send "review" while checking their work; that's still in progress.
+  // (Review now means "submitted, waiting for a human" — set by complete_task.)
+  review: 'in_progress',
+}
+
+/** What a PR description must contain so Conductor links it to the task (decision #19). */
+export function prInstructions(taskId: string, issueNumber?: number | null): string {
+  return issueNumber
+    ? `In your pull request description include the lines "Closes #${issueNumber}" and "Conductor-Task: ${taskId}".`
+    : `In your pull request description include the line "Conductor-Task: ${taskId}".`
+}
+
+export interface HistoryItem {
+  at: string
+  who: string
+  kind: string
+  message: string
+  files?: string[]
 }
 
 export interface OpsContext {
@@ -264,6 +295,11 @@ export interface TaskView {
   goalTitle?: string
   repo?: string
   branch?: string
+  issue?: { number: number; url: string } | null
+  reviewNote?: string
+  /** Earlier work on this task (other agents, review notes), newest first. */
+  history?: HistoryItem[]
+  prInstructions?: string
 }
 
 // ── Operations ─────────────────────────────────────────────────────────────
@@ -558,8 +594,22 @@ export class Ops {
       predictedFiles: row.data.predictedFiles ?? [],
       touchedFiles: row.data.touchedFiles ?? [],
       status: row.data.status,
+      issue: row.data.issueNumber ? { number: row.data.issueNumber, url: row.data.issueUrl ?? '' } : null,
+      ...(row.data.reviewNote ? { reviewNote: row.data.reviewNote } : {}),
       ...extra,
     }
+  }
+
+  /** A task's timeline from the activity log, newest first. */
+  async taskHistory(taskId: string, limit = 12): Promise<HistoryItem[]> {
+    const rows = await this.store.query<EventRow>('events', { taskId }, { orderBy: 'at', orderDir: 'desc', limit })
+    return rows.map((e) => ({
+      at: new Date(e.data.at).toISOString(),
+      who: e.data.actorName ?? '',
+      kind: e.data.kind,
+      message: e.data.message,
+      ...(e.data.files?.length ? { files: e.data.files } : {}),
+    }))
   }
 
   private async taskContext(row: Row<Task>): Promise<TaskView> {
@@ -567,10 +617,14 @@ export class Ops {
       this.store.get<Goal>('goals', row.data.goalId),
       this.store.get<Project>('projects', row.data.projectId),
     ])
+    const history = await this.taskHistory(row.recordId)
     return this.taskView(row, {
       goalTitle: goal?.data.title,
       repo: project ? `${project.data.repoOwner}/${project.data.repoName}` : undefined,
       branch: project?.data.defaultBranch,
+      // Only worth sending when someone else worked on it before (handoff).
+      ...(history.some((h) => h.kind !== 'plan') ? { history } : {}),
+      prInstructions: prInstructions(row.recordId, row.data.issueNumber),
     })
   }
 
@@ -608,7 +662,17 @@ export class Ops {
     }
 
     const tasks = await this.projectTasks(projectId)
+    // A task sent back from review is held for the agent that did it (it has the
+    // context) while that agent is still online; it goes first in that agent's list.
+    const agents = new Map((await this.store.query<Agent>('agents', { projectId })).map((a) => [a.recordId, a]))
+    const heldForOther = (t: Row<Task> | undefined) =>
+      !!t?.data.reviewNote && !!t.data.lastAgentId && t.data.lastAgentId !== agentId && agents.get(t.data.lastAgentId)?.data.status !== 'offline'
     const ranked = rankReadyTasks(tasks.map(toLite), await this.projectEdges(projectId))
+      .filter((r) => !heldForOther(tasks.find((t) => t.recordId === r.task.id)))
+      .sort((x, y) => {
+        const mine = (t: TaskLite) => (tasks.find((r) => r.recordId === t.id)?.data.lastAgentId === agentId ? 0 : 1)
+        return mine(x.task) - mine(y.task)
+      })
     for (const candidate of ranked) {
       const claimed = await this.store.tryCreate<Claim>('task_claims', { teamId, taskId: candidate.task.id, agentId })
       if (!claimed) continue
@@ -726,7 +790,7 @@ export class Ops {
     return { questionId }
   }
 
-  async completeTask(agentId: string, input: { summary?: unknown; prUrl?: unknown }): Promise<{ done: boolean; prUrl: string | null; message: string; goalDone: boolean }> {
+  async completeTask(agentId: string, input: { summary?: unknown; prUrl?: unknown }): Promise<{ submitted: boolean; prUrl: string | null; message: string }> {
     const agent = await this.requireOwnedAgent(agentId)
     const { teamId, projectId } = agent.data
     const taskId = agent.data.currentTaskId
@@ -734,7 +798,7 @@ export class Ops {
     if (!task || task.data.agentId !== agentId) throw new OpsError('no_task', 'You have no current task to complete', 409)
     const summary = clip(input.summary, MAX_SUMMARY)
 
-    let prUrl: string | null = null
+    let prUrl: string | null = task.data.prUrl ?? null
     let note = ''
     if (typeof input.prUrl === 'string' && input.prUrl.trim()) {
       const pr = parsePrUrl(input.prUrl)
@@ -747,30 +811,116 @@ export class Ops {
       else note = ' The PR link was ignored: it must be a pull request URL in this project’s repository.'
     }
 
+    // Review gate (decision #21): the agent is done; a human approves (or a merged PR does).
     await this.store.update<Task>('tasks', task.recordId, {
-      status: 'done',
+      status: 'review',
       lastSummary: summary || task.data.lastSummary || '',
       prUrl,
-      prState: prUrl ? 'open' : '',
+      prState: prUrl ? task.data.prState || 'open' : '',
+      lastAgentId: agentId,
+      reviewNote: '',
       updatedAtMs: this.now(),
     })
     for (const claim of await this.store.query<Claim>('task_claims', { taskId: task.recordId })) {
       await this.store.remove('task_claims', claim.recordId)
     }
     await this.store.update<Agent>('agents', agentId, { status: agent.data.status === 'paused' ? 'paused' : 'idle', currentTaskId: null, lastSeenAt: this.now(), ...(summary ? { lastSummary: summary } : {}) })
-    await this.log({ teamId, projectId, agentId, taskId: task.recordId, kind: 'complete', message: `${agent.data.name} finished “${task.data.title}”${prUrl ? ' with a PR' : ''}`, actorName: agent.data.name })
-    await this.recomputeOverlaps(teamId, projectId)
+    await this.log({ teamId, projectId, agentId, taskId: task.recordId, kind: 'complete', message: `${agent.data.name} submitted “${task.data.title}” for review${prUrl ? ' with a PR' : ''}`, actorName: agent.data.name })
+    return { submitted: true, prUrl, message: `Submitted for review — a teammate will approve it or send it back with notes.${note} Call next_task for more work.` }
+  }
 
+  /** Mark a task done (approval or merged PR) and close its goal when every task is done. */
+  async markDone(task: Row<Task>, actorName: string, message: string): Promise<{ goalDone: boolean }> {
+    const { teamId, projectId } = task.data
+    await this.store.update<Task>('tasks', task.recordId, { status: 'done', updatedAtMs: this.now() })
+    for (const claim of await this.store.query<Claim>('task_claims', { taskId: task.recordId })) {
+      await this.store.remove('task_claims', claim.recordId)
+    }
+    if (task.data.agentId) {
+      const agent = await this.store.get<Agent>('agents', task.data.agentId)
+      if (agent?.data.currentTaskId === task.recordId) {
+        await this.store.update<Agent>('agents', agent.recordId, { currentTaskId: null, status: agent.data.status === 'paused' ? 'paused' : 'idle' })
+      }
+    }
+    await this.log({ teamId, projectId, agentId: task.data.agentId ?? undefined, taskId: task.recordId, kind: 'review', message, actorName })
+    await this.recomputeOverlaps(teamId, projectId)
     const goalTasks = await this.store.query<Task>('tasks', { goalId: task.data.goalId })
     const goalDone = goalTasks.every((t) => (t.recordId === task.recordId ? true : t.data.status === 'done'))
     if (goalDone) {
       const goal = await this.store.get<Goal>('goals', task.data.goalId)
-      if (goal) {
+      if (goal && goal.data.status !== 'done') {
         await this.store.update<Goal>('goals', goal.recordId, { status: 'done' })
-        await this.log({ teamId, projectId, kind: 'plan', message: `goal done: ${goal.data.title}`, actorName: agent.data.name })
+        await this.log({ teamId, projectId, kind: 'plan', message: `goal done: ${goal.data.title}`, actorName })
       }
     }
-    return { done: true, prUrl, goalDone, message: `Task complete.${note} Call next_task for more work.` }
+    return { goalDone }
+  }
+
+  async approveTask(taskId: string): Promise<{ goalDone: boolean }> {
+    const task = await this.loadForMember<Task>('tasks', taskId, 'Task')
+    if (task.data.status !== 'review') throw new OpsError('not_in_review', 'Only a task waiting for review can be approved', 409)
+    return this.markDone(task, await this.userName(), `approved “${task.data.title}”`)
+  }
+
+  async requestChanges(taskId: string, note: unknown): Promise<void> {
+    const task = await this.loadForMember<Task>('tasks', taskId, 'Task')
+    if (task.data.status !== 'review') throw new OpsError('not_in_review', 'Only a task waiting for review can be sent back', 409)
+    const text = requireText(note, MAX_SUMMARY, 'What to change')
+    const name = await this.userName()
+    const previous = task.data.agentId ?? task.data.lastAgentId ?? null
+    await this.store.update<Task>('tasks', taskId, { status: 'ready', agentId: null, lastAgentId: previous, reviewNote: text, updatedAtMs: this.now() })
+    await this.log({ teamId: task.data.teamId, projectId: task.data.projectId, taskId, kind: 'review', message: `requested changes on “${task.data.title}”: ${text}` })
+    if (previous && (await this.store.get<Agent>('agents', previous))) {
+      await this.store.create<Directive>('directives', {
+        teamId: task.data.teamId,
+        agentId: previous,
+        kind: 'note',
+        text: clip(`Changes requested on “${task.data.title}”: ${text} It's back in Ready — next_task gives it to you first.`, MAX_SUMMARY + 200),
+        targetTaskId: taskId,
+        createdBy: this.userId,
+        createdByName: name,
+        deliveredAt: null,
+      })
+    }
+    await this.recomputeOverlaps(task.data.teamId, task.data.projectId)
+  }
+
+  /**
+   * A task's PR merged: it counts as approval, and agents working on files it
+   * changed are told to pull/rebase before going further (merge alerts).
+   */
+  async onPrMerged(taskId: string): Promise<{ alerted: string[] }> {
+    const task = await this.loadForMember<Task>('tasks', taskId, 'Task')
+    if (task.data.status !== 'done') await this.markDone(task, 'Conductor', `PR merged for “${task.data.title}”`)
+    if (task.data.mergeAlerted) return { alerted: [] }
+    const files = new Set([...(task.data.predictedFiles ?? []), ...(task.data.touchedFiles ?? [])])
+    const edges = await this.projectEdges(task.data.projectId)
+    const alerted: string[] = []
+    for (const other of await this.projectTasks(task.data.projectId)) {
+      if (other.recordId === taskId || !other.data.agentId || !isActive(other.data) || other.data.status === 'review') continue
+      const theirs = [...(other.data.predictedFiles ?? []), ...(other.data.touchedFiles ?? [])]
+      const shared = theirs.filter((f) => files.has(f))
+      const near = shared.length ? [] : theirs.filter((f) => [...files].some((g) => (edges[f] ?? []).includes(g) || (edges[g] ?? []).includes(f)))
+      if (!shared.length && !near.length) continue
+      const agent = await this.store.get<Agent>('agents', other.data.agentId)
+      if (!agent) continue
+      await this.store.create<Directive>('directives', {
+        teamId: task.data.teamId,
+        agentId: agent.recordId,
+        kind: 'note',
+        text: clip(`“${task.data.title}” was merged and changed ${shared.length ? shared.join(', ') : 'files next to yours (' + near.join(', ') + ')'}. Pull the latest default branch and rebase before you continue.`, MAX_SUMMARY),
+        targetTaskId: other.recordId,
+        createdBy: this.userId,
+        createdByName: 'Conductor',
+        deliveredAt: null,
+      })
+      alerted.push(agent.data.name)
+    }
+    await this.store.update<Task>('tasks', taskId, { mergeAlerted: 1 })
+    if (alerted.length) {
+      await this.log({ teamId: task.data.teamId, projectId: task.data.projectId, taskId, kind: 'github', message: `merge alert: told ${alerted.join(', ')} to pull “${task.data.title}”`, actorName: 'Conductor' })
+    }
+    return { alerted }
   }
 
   // ── Overlaps ────────────────────────────────────────────────────────────
@@ -933,6 +1083,7 @@ export class Ops {
         const state = await this.github.getPullRequest(pr.owner, pr.repo, pr.number)
         checked++
         if (state !== t.data.prState) await this.store.update<Task>('tasks', t.recordId, { prState: state })
+        if (state === 'merged') await this.onPrMerged(t.recordId)
       } catch {
         // One missing PR shouldn't stop the rest.
       }
@@ -943,17 +1094,46 @@ export class Ops {
 
 // ── System jobs (no caller; run by cron) ───────────────────────────────────
 
-/** Mark agents that stopped checking in as offline. Their tasks stay theirs. */
-export async function sweepStaleAgents(store: Store, now: number, staleMs: number): Promise<number> {
-  let marked = 0
-  for (const status of ['working', 'idle'] as const) {
+/**
+ * Stale sweep (cron, as the owner): agents silent for `staleMs` go offline;
+ * agents silent for `releaseMs` give their task back to Ready, with a note for
+ * when they return (auto-release, decision #21). Demo and paused work is left alone.
+ */
+export async function sweepStaleAgents(ops: Ops, now: number, staleMs: number, releaseMs = Infinity): Promise<{ offline: number; released: number }> {
+  const store = ops.store
+  let offline = 0
+  let released = 0
+  for (const status of ['working', 'idle', 'offline'] as const) {
     for (const a of await store.query<Agent>('agents', { status })) {
       if (a.data.kind === 'demo') continue
-      if ((a.data.lastSeenAt ?? 0) < now - staleMs) {
+      const silentFor = now - (a.data.lastSeenAt ?? 0)
+      if (status !== 'offline' && silentFor > staleMs) {
         await store.update<Agent>('agents', a.recordId, { status: 'offline' })
-        marked++
+        offline++
+      }
+      if (silentFor > releaseMs && a.data.currentTaskId) {
+        const task = await store.get<Task>('tasks', a.data.currentTaskId)
+        if (task && task.data.agentId === a.recordId && ['assigned', 'in_progress', 'blocked'].includes(task.data.status)) {
+          for (const c of await store.query<Claim>('task_claims', { taskId: task.recordId })) await store.remove('task_claims', c.recordId)
+          await store.update<Task>('tasks', task.recordId, { status: 'ready', agentId: null, lastAgentId: a.recordId, updatedAtMs: now })
+          await store.update<Agent>('agents', a.recordId, { currentTaskId: null })
+          const hours = Math.round(silentFor / 3_600_000)
+          await store.create<Directive>('directives', {
+            teamId: a.data.teamId,
+            agentId: a.recordId,
+            kind: 'note',
+            text: `You were offline for ${hours}+ hours, so “${task.data.title}” went back to Ready for others. Call next_task when you're back.`,
+            targetTaskId: task.recordId,
+            createdBy: ops.userId,
+            createdByName: 'Conductor',
+            deliveredAt: null,
+          })
+          await ops.log({ teamId: a.data.teamId, projectId: a.data.projectId, agentId: a.recordId, taskId: task.recordId, kind: 'agent', message: `released “${task.data.title}” from ${a.data.name} after ${hours}+ hours offline`, actorName: 'Conductor' })
+          await ops.recomputeOverlaps(a.data.teamId, a.data.projectId)
+          released++
+        }
       }
     }
   }
-  return marked
+  return { offline, released }
 }

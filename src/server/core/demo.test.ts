@@ -53,13 +53,17 @@ describe('demo run', () => {
       if (paused && state.tick === 20) await ops('bob').sendDirective(payload.agentIds[0]!, 'resume')
       const q = db.all('questions').find((r) => r.data.status === 'open')
       if (q && state.tick > 12) await ops('bob').answerQuestion(q.recordId, 'Keep the current behaviour.')
+      // Bob reviews: approve whatever the agents submit.
+      for (const t of db.all('tasks').filter((t) => t.data.status === 'review')) await ops('bob').approveTask(t.recordId)
     }
     expect(db.all('tasks').every((t) => t.data.status === 'done')).toBe(true)
     expect(db.all('overlaps').length).toBeGreaterThanOrEqual(1)
     expect(db.all('questions')).toHaveLength(1)
     expect((db.rows.get(goalId)!.data as unknown as Goal).status).toBe('done')
     const kinds = new Set(db.all('directives').map((d) => d.data.kind))
-    expect(kinds).toEqual(new Set(['pause', 'resume', 'answer']))
+    expect(kinds).toContain('pause')
+    expect(kinds).toContain('resume')
+    expect(kinds).toContain('answer')
     // Every directive was delivered to the agent.
     expect(db.all('directives').every((d) => d.data.deliveredAt)).toBe(true)
     await finishDemo(ops('alice'), payload, 'every task is done')
@@ -89,5 +93,25 @@ describe('demo run', () => {
     for (const t of db.all('tasks')) t.data.status = 'done'
     for (const g of db.all('goals')) g.data.demoState = 'stopped'
     await expect(prepareDemo(ops('alice'), projectId)).rejects.toMatchObject({ code: 'nothing_to_demo' })
+  })
+})
+
+describe('demo and the review gate', () => {
+  it('stops and says so when the remaining work waits on review', async () => {
+    const { projectId } = await seed()
+    const payload = await prepareDemo(ops('alice'), projectId)
+    let state = initialDemoState()
+    let result
+    for (let i = 0; i < 80; i++) {
+      result = await demoTick(ops('alice'), payload, state)
+      state = result.state
+      const q = db.all('questions').find((r) => r.data.status === 'open')
+      if (q) await ops('bob').answerQuestion(q.recordId, 'ok')
+      if (result.done) break
+    }
+    expect(result!.done).toBe(true)
+    expect(result!.reason).toMatch(/approve the \d task\(s\) in Review/)
+    // "Wire up" depends on "Toggle", which is only in review, so it was never started.
+    expect(db.all('tasks').find((t) => t.data.title === 'Wire up')!.data.status).toBe('ready')
   })
 })

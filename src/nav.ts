@@ -17,6 +17,7 @@ export interface NavItem {
 
 export const nav: NavItem[] = [
   { path: '/teams', label: 'Teams' },
+  { path: '/inbox', label: 'Inbox', roles: ['member' as Role] },
   { path: '/assistant', label: 'Assistant', roles: ['member' as Role] },
   { path: '/settings', label: 'Settings' },
   // The /api-status debug page still exists — add

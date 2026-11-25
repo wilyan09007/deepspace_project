@@ -111,6 +111,10 @@ What you do:
   - Connecting a coding agent (Claude Code, Codex, any agent that runs shell commands): sign in on that machine with \`npx deepspace auth login\`, then open the board's "Connect an agent" page and copy its instructions into the repo's AGENTS.md or CLAUDE.md. The agent calls \`npx deepspace agent invoke conductor <tool> --input '<json>' --json\` with these tools only: list_projects, register_agent, next_task, check_in, ask_human, complete_task, get_task.
   - Overlaps are detected automatically from the files agents check in with; there is no tool to report one.
   - Steering: Pause, Resume, "Take task back" and Note buttons on each agent; answers to agent questions are delivered on the agent's next check-in.
+  - Review: when an agent finishes, its task waits in the Review column until a teammate clicks Approve or Request changes (in the task, or on the Inbox page). A merged PR also approves it. Sent-back tasks go to the same agent first, with the note.
+  - Inbox (top navigation): tasks waiting for review, open agent questions, your agents that are paused/offline/blocked, and overlaps involving your agents.
+  - GitHub: on a project's board, the GitHub panel connects your own GitHub account, can mirror every task as a GitHub issue (labels show status; done closes it), lists open issues ("Plan as goal") and pull requests, and links PRs to tasks when the PR description says "Closes #<issue>" or "Conductor-Task: <id>". Syncing happens when someone opens the board or clicks Sync now.
+  - Agents offline for 2+ hours give their task back to Ready automatically.
   If you don't know something about Conductor, say so rather than guessing.
 - Steer an agent (pause, resume, reassign, or send a note) only when the user asks. Call send_directive; the first call returns a proposal — show it to the user and ask them to reply "yes" to confirm. Only after they confirm, call send_directive again with the same arguments.
 
@@ -195,6 +199,8 @@ export function buildAssistantTools(ops: Ops, currentMessage: string): ToolSet {
               title: t.data.title,
               status: t.data.status,
               agent: t.data.agentId ? agentName.get(t.data.agentId) ?? null : null,
+              issue: t.data.issueNumber ? `#${t.data.issueNumber}` : undefined,
+              reviewNote: t.data.reviewNote || undefined,
               files: [...new Set([...(t.data.predictedFiles ?? []), ...(t.data.touchedFiles ?? [])])].slice(0, 8),
               pr: t.data.prUrl ? { url: t.data.prUrl, state: t.data.prState } : undefined,
             })),

@@ -12,6 +12,8 @@ import type { Env } from '../../worker'
 import { PLANNER_MODEL, PLANNER_RUNS_PER_USER_PER_DAY } from '../server/core/config'
 import { prepareDemo, requestStopDemo } from '../server/core/demo'
 import { githubClient } from '../server/core/github'
+import { githubConnection, preferUserGithub, startGithubConnection, userGithub } from '../server/core/github-user'
+import { commentPlanOnIssue, goalFromIssue, setMirroring, syncProject } from '../server/core/github-sync'
 import { resetGoalForRetry, runPlanner, type PlannerDeps } from '../server/core/planner'
 import { makeOps, userModel } from '../server/core/runtime'
 import { seedDevFixture, seedDevRepoProject } from '../server/core/fixtures'
@@ -39,9 +41,24 @@ function action(fn: (ctx: Ctx) => Promise<unknown>): ActionHandler<Env> {
 
 function plannerDeps(ctx: Ctx): PlannerDeps {
   return {
-    github: githubClient(ctx.env, { kind: 'user', jwt: ctx.callerJwt }),
+    github: preferUserGithub(userGithub(ctx.env, ctx.callerJwt), githubClient(ctx.env, { kind: 'user', jwt: ctx.callerJwt })),
     generate: userModel(ctx.env, ctx.callerJwt, PLANNER_MODEL),
     modelId: PLANNER_MODEL,
+  }
+}
+
+const appUrl = (env: Env) => `https://${env.APP_NAME}.app.space`
+
+/** After planning: mirror new tasks as issues (when on) and tell a source issue what it became. Never fails the plan. */
+async function afterPlan(ctx: Ctx, goalId: string, projectId: string) {
+  const ops = makeOps(ctx.env, ctx.userId, ctx.callerJwt, ctx.callerJwt)
+  const gh = userGithub(ctx.env, ctx.callerJwt)
+  try {
+    const project = await ops.store.get<{ mirrorIssues?: number }>('projects', projectId)
+    if (project?.data.mirrorIssues) await syncProject(ops, projectId, gh, appUrl(ctx.env), { force: true })
+    await commentPlanOnIssue(ops, goalId, gh, appUrl(ctx.env))
+  } catch (e) {
+    console.warn(`[github] after-plan sync skipped: ${e instanceof Error ? e.message : String(e)}`)
   }
 }
 
@@ -50,6 +67,8 @@ async function plan(ctx: Ctx, goalId: string) {
   const ops = makeOps(ctx.env, ctx.userId, ctx.callerJwt)
   try {
     const { taskIds } = await runPlanner(ops, goalId, plannerDeps(ctx))
+    const goal = await ops.store.get<{ projectId: string }>('goals', goalId)
+    if (goal) await afterPlan(ctx, goalId, goal.data.projectId)
     return { goalId, tasks: taskIds.length }
   } catch (e) {
     if (e instanceof OpsError && (e.code === 'not_found' || e.code === 'not_plannable')) throw e
@@ -102,6 +121,37 @@ export const actions: Record<string, ActionHandler<Env>> = {
     const goal = await resetGoalForRetry(ops, str(ctx.params.goalId))
     return plan(ctx, goal.recordId)
   }),
+
+  /** Plan a goal from an open GitHub issue on the board (user-billed, like planGoal). */
+  planFromIssue: action(async (ctx) => {
+    const ops = makeOps(ctx.env, ctx.userId, ctx.callerJwt, ctx.callerJwt)
+    await ops.bump('plan', PLANNER_RUNS_PER_USER_PER_DAY)
+    const { goalId } = await goalFromIssue(ops, str(ctx.params.projectId), Number(ctx.params.issueNumber))
+    return plan(ctx, goalId)
+  }),
+
+  // ── GitHub (decision #19): everything acts as, and is billed to, the caller ──
+  githubStatus: action(async ({ env, callerJwt }) => githubConnection(env, callerJwt)),
+
+  connectGithub: action(async ({ env, callerJwt, params }) => {
+    const back = typeof params.returnTo === 'string' && params.returnTo.startsWith('/') && !params.returnTo.startsWith('//') ? params.returnTo : '/teams'
+    return startGithubConnection(env, callerJwt, `${appUrl(env)}${back}`)
+  }),
+
+  setMirroring: action(({ env, userId, callerJwt, params }) =>
+    setMirroring(makeOps(env, userId, callerJwt, callerJwt), str(params.projectId), userGithub(env, callerJwt), params.on === true, appUrl(env)),
+  ),
+
+  syncGithub: action(({ env, userId, callerJwt, params }) =>
+    syncProject(makeOps(env, userId, callerJwt, callerJwt), str(params.projectId), userGithub(env, callerJwt), appUrl(env), { force: params.force === true }),
+  ),
+
+  // ── Review gate (decision #21) ──
+  approveTask: action(({ env, userId, callerJwt, params }) => makeOps(env, userId, undefined, callerJwt).approveTask(str(params.taskId))),
+
+  requestChanges: action(({ env, userId, callerJwt, params }) =>
+    makeOps(env, userId, undefined, callerJwt).requestChanges(str(params.taskId), params.note),
+  ),
 
   sendDirective: action(({ env, userId, callerJwt, params }) =>
     makeOps(env, userId, undefined, callerJwt).sendDirective(str(params.agentId), params.kind, params.text),

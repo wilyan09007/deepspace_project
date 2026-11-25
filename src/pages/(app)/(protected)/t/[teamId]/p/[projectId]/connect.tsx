@@ -21,14 +21,18 @@ This repository (${repo}) is coordinated with Conductor so several AI agents can
    ${cmd('check_in', '{"agent_id":"AGENT_ID","status":"working","summary":"what you are doing","files":["src/file.ts"]}')}
 4. If you need a human decision:
    ${cmd('ask_human', '{"agent_id":"AGENT_ID","question":"..."}')}
-5. When the task is done (include a PR link only if you opened one):
+5. Open a pull request. Its description must include the lines next_task gave you in "prInstructions":
+   "Closes #<issue>" (when the task has a GitHub issue) and "Conductor-Task: <task id>". That links the PR to the task.
+6. Submit the task for review (include the PR link only if you opened one):
    ${cmd('complete_task', '{"agent_id":"AGENT_ID","summary":"what changed","pr_url":"https://github.com/OWNER/REPO/pull/N"}')}
-   Then go back to step 2.
+   A teammate approves it (or merging the PR does), or sends it back with notes. Then go back to step 2.
 
 Rules:
 - Every response may contain "directives" from your team. Obey them: "pause" = stop editing and check in again later; "reassign" = drop the task (leave shared files in a working state) and call next_task; "note"/"answer" = take it into account.
 - "overlaps" name another agent working in or next to your files. Keep your changes there small and mention them in your check-in summary.
-- Only edit the files your task needs. If you need others, list them in your next check-in.`
+- Only edit the files your task needs. If you need others, list them in your next check-in.
+- If next_task returns "history" or "reviewNote", someone worked on this task before or a reviewer asked for changes. Read them first and continue from there.
+- A note saying another task "was merged" means files you're working on changed: pull the default branch and rebase before continuing.`
 }
 
 export default function ConnectPage() {
