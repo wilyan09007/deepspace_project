@@ -18,12 +18,14 @@ Open items at the bottom are waiting on the owner.
 | 9 | No demo video; finish as much as possible, leave little unfinished | Owner | |
 | 10 | Repo will be made public before submission | Owner | |
 
+| 11 | **Users pay for all AI** with their own DeepSpace sign-in (planning a goal, the assistant, the GitHub reads those trigger). No owner-paid AI | Owner | Answered 2026-11-25. Free accounts get 500 credits/month |
+| 12 | Build the in-app assistant **with guardrails**: input limits, cheap topic/injection check, narrow prompt, agent-written text treated as data, team-scoped tools, server-enforced confirmation before pause/resume/reassign, red-team test set | Owner | Answered 2026-11-25 |
+| 13 | Teammates join through an **invite link** with a one-time code (7-day expiry) | Owner | Answered 2026-11-25 |
+| 14 | Daily digest **by email and on the board** | Owner | Answered 2026-11-25 |
+| 15 | Digest is written **without AI** (from the day's events) so it costs nothing | Agent, following #11 | A scheduled job has no signed-in user to bill, so an AI digest could only bill the owner |
+| 16 | Digest **emails are the one owner-paid cost**: opt-in per member, at most 3 per day (about 1.3¢ each, so at most ~$1.20/month) | Agent, reconciling #11 with #14 | Scheduled jobs can only bill the owner. Owner can switch emails off by setting the cap to 0 (`DIGEST_EMAIL_DAILY_CAP` in `src/server/core/config.ts`) |
+| 17 | PR status is refreshed **when a member opens the board** (user-billed, at most once per 10 minutes per project), not by an owner-paid hourly job | Agent, following #11 | Replaces the hourly `pr-refresh` cron in the earlier plan |
+
 ## Open — waiting on the owner
 
-| # | Question | Recommendation |
-|---|----------|----------------|
-| A | Who pays for AI planning and digests? | Revised after owner said their credits are capped: each user pays for AI they trigger (planning, assistant) with their own DeepSpace credits; owner pays only a small capped daily digest; demo and sample cost nothing. See BUILD_NOTES "Who pays" |
-| E | In-app assistant guardrails (owner asked for off-topic refusal and red-team hardening) | Guard classifier + narrow prompt + untrusted-data rule + scoped tools + red-team test set. See BUILD_NOTES |
-| B | How do teammates join a team? | Invite link with a one-time code |
-| C | Daily digest channel | Email (built-in `email/send`, no setup per team); Slack later |
-| D | In-app assistant ("what is agent X doing?") using the same tools | Yes, after the core loop works |
+None.
