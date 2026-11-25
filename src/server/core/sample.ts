@@ -69,3 +69,29 @@ export async function loadSample(ops: Ops, teamId: string): Promise<{ projectId:
   await savePlan(ops, goal, { summary: sample.summary, tasks: sample.tasks, droppedFiles: [] }, sample.importEdges, `${sample.model} (captured ${sample.capturedAt})`)
   return { projectId: project.recordId, goalId }
 }
+
+/** A goal's plan in the SamplePlan shape (members only) — used to capture the sample. */
+export async function exportPlan(ops: Ops, goalId: string): Promise<SamplePlan> {
+  const goal = await ops.loadForMember<Goal>('goals', goalId, 'Goal')
+  const project = await ops.loadForMember<Project>('projects', goal.data.projectId, 'Project')
+  const tasks = (await ops.store.query<Task>('tasks', { goalId })).sort((a, b) => a.data.order - b.data.order)
+  const index = new Map(tasks.map((t, i) => [t.recordId, i]))
+  return {
+    repo: `${project.data.repoOwner}/${project.data.repoName}`,
+    branch: project.data.defaultBranch,
+    description: project.data.description ?? '',
+    goalTitle: goal.data.title,
+    goalBody: goal.data.body ?? '',
+    summary: goal.data.planSummary ?? '',
+    model: goal.data.planModel ?? '',
+    capturedAt: goal.createdAt.slice(0, 10),
+    tasks: tasks.map((t) => ({
+      title: t.data.title,
+      body: t.data.body ?? '',
+      acceptance: t.data.acceptance ?? '',
+      predictedFiles: t.data.predictedFiles ?? [],
+      dependsOn: (t.data.dependsOn ?? []).map((d) => index.get(d)).filter((i): i is number => i !== undefined),
+    })),
+    importEdges: goal.data.importEdges ?? {},
+  }
+}
