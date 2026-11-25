@@ -13,7 +13,7 @@ import { PLANNER_MODEL, PLANNER_RUNS_PER_USER_PER_DAY } from '../server/core/con
 import { prepareDemo, requestStopDemo } from '../server/core/demo'
 import { githubClient } from '../server/core/github'
 import { githubConnection, preferUserGithub, startGithubConnection, userGithub } from '../server/core/github-user'
-import { commentPlanOnIssue, goalFromIssue, setMirroring, syncProject } from '../server/core/github-sync'
+import { commentPlanOnIssue, goalFromIssue, setMirroring, setupWebhook, syncProject } from '../server/core/github-sync'
 import { resetGoalForRetry, runPlanner, type PlannerDeps } from '../server/core/planner'
 import { makeOps, userModel } from '../server/core/runtime'
 import { seedDevFixture, seedDevRepoProject } from '../server/core/fixtures'
@@ -151,6 +151,11 @@ export const actions: Record<string, ActionHandler<Env>> = {
 
   syncGithub: action(({ env, userId, callerJwt, params }) =>
     syncProject(makeOps(env, userId, callerJwt, callerJwt), str(params.projectId), userGithub(env, callerJwt), appUrl(env), { force: params.force === true }),
+  ),
+
+  /** Live updates: add a GitHub webhook as the caller, or get the steps to add it by hand (decision #24). */
+  setupGithubWebhook: action(({ env, userId, callerJwt, params }) =>
+    setupWebhook(makeOps(env, userId, callerJwt, callerJwt), str(params.projectId), userGithub(env, callerJwt), appUrl(env)),
   ),
 
   // ── Review gate (decision #21) ──

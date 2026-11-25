@@ -115,6 +115,9 @@ export const conductorSchemas: CollectionSchema[] = [
       text('mirrorBy'),
       num('ghSyncedAt'),
       text('ghSyncError'),
+      // Live updates over a GitHub webhook: how it was added ('auto' | 'manual'), last delivery.
+      text('ghWebhook'),
+      num('ghWebhookAt'),
     ],
     teamField: 'teamId',
     permissions: TEAM_READ_ONLY,
@@ -297,6 +300,14 @@ export const conductorSchemas: CollectionSchema[] = [
     name: 'assistant_proposals',
     columns: [text('userId'), text('agentId'), text('kind'), text('text'), text('summary'), num('createdAt'), num('expiresAt')],
     uniqueOn: ['userId'],
+    permissions: SERVER_ONLY,
+  },
+  {
+    // A project's GitHub webhook: the secret GitHub signs deliveries with. Server-only: anyone holding
+    // the secret could forge events for the project.
+    name: 'github_webhooks',
+    columns: [text('teamId'), text('projectId'), text('secret'), num('hookId'), num('createdAt')],
+    uniqueOn: ['projectId'],
     permissions: SERVER_ONLY,
   },
   {

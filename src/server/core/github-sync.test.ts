@@ -7,9 +7,11 @@ import {
   parsePrLinks,
   parseTaskMarker,
   setMirroring,
+  setupWebhook,
   syncProject,
   type GithubItem,
 } from './github-sync'
+import { receiveGithubWebhook, signGithubPayload } from './github-webhook'
 import { Ops, type Goal, type Project, type Task } from './ops'
 import { Store } from './store'
 import { FakeTools } from './testing/fake-tools'
@@ -43,6 +45,14 @@ class FakeGitHub implements GitHubWriter {
   async comment(_o: string, _r: string, n: number, body: string) { this.check(); this.issues.find((x) => x.number === n)!.comments.push(body) }
   async listIssues() { this.check(); return this.issues.map((i) => ({ ...i })) }
   async listPulls() { this.check(); return this.pulls.map((p) => ({ ...p })) }
+  hooks: Array<{ url: string; secret: string; events: string[] }> = []
+  hookFails = false
+  async createWebhook(_o: string, _r: string, h: { url: string; secret: string; events: string[] }) {
+    this.check()
+    if (this.hookFails) throw new Error('Not Found')
+    this.hooks.push(h)
+    return { id: this.hooks.length }
+  }
 }
 
 let db: FakeTools
@@ -233,5 +243,111 @@ describe('reading GitHub back', () => {
     await commentPlanOnIssue(ops('alice'), goalId, gh, APP)
     expect(gh.issues.find((i) => i.number === 40)!.comments[0]).toContain('- #41 Search API')
     await expect(goalFromIssue(ops('alice'), projectId, 999, reviewed)).rejects.toMatchObject({ code: 'not_found' })
+  })
+})
+
+describe('webhooks', () => {
+  /** GitHub's JSON for an issue or PR, as webhooks send it. */
+  const ghIssue = (i: IssueSummary, extra: Record<string, unknown> = {}) => ({
+    number: i.number,
+    title: i.title,
+    html_url: i.url,
+    state: i.state,
+    body: i.body,
+    labels: i.labels.map((name) => ({ name })),
+    user: { login: i.author },
+    updated_at: i.updatedAt,
+    ...extra,
+  })
+  const secretOf = (projectId: string) =>
+    db.all('github_webhooks').map((r) => r.data as unknown as { projectId: string; secret: string }).find((w) => w.projectId === projectId)?.secret ?? ''
+  /** Deliver a signed event, received as no one in particular (webhooks have no signed-in user). */
+  async function deliver(projectId: string, event: string, payload: Record<string, unknown>, secret = secretOf(projectId)) {
+    const body = JSON.stringify({ repository: { full_name: 'acme/web' }, ...payload })
+    return receiveGithubWebhook(ops('system'), projectId, { event, body, signature: await signGithubPayload(secret, body) })
+  }
+
+  it("adds the webhook through the member's GitHub, with a secret only the server keeps", async () => {
+    const { projectId } = await seed()
+    const url = `${APP}/api/github/webhook/${projectId}`
+    expect(await setupWebhook(ops('alice'), projectId, gh, APP)).toEqual({ mode: 'auto', url })
+    expect(secretOf(projectId)).toMatch(/^[0-9a-f]{64}$/)
+    expect(gh.hooks).toEqual([{ url, secret: secretOf(projectId), events: ['issues', 'pull_request'] }])
+    expect(db.rows.get(projectId)!.data).toMatchObject({ ghWebhook: 'auto' })
+    // Asking again doesn't add a second webhook.
+    expect((await setupWebhook(ops('alice'), projectId, gh, APP)).mode).toBe('auto')
+    expect(gh.hooks).toHaveLength(1)
+    await expect(setupWebhook(ops('eve'), projectId, gh, APP)).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('without admin access on GitHub, gives the member the steps to add it themselves', async () => {
+    const { projectId } = await seed()
+    gh.hookFails = true
+    const r = await setupWebhook(ops('alice'), projectId, gh, APP)
+    expect(r).toMatchObject({ mode: 'manual', url: `${APP}/api/github/webhook/${projectId}`, secret: secretOf(projectId) })
+    expect(db.rows.get(projectId)!.data).toMatchObject({ ghWebhook: 'manual' })
+    // Once an admin has added it and events arrive, the secret is never shown again.
+    await deliver(projectId, 'ping', { zen: 'hi' })
+    expect(await setupWebhook(ops('bob'), projectId, gh, APP)).toEqual({ mode: 'auto', url: `${APP}/api/github/webhook/${projectId}` })
+  })
+
+  it('removing a member replaces any webhook secret they could have seen', async () => {
+    const { teamId, projectId } = await seed()
+    gh.hookFails = true
+    const seen = await setupWebhook(ops('bob'), projectId, gh, APP)
+    if (seen.mode !== 'manual') throw new Error('expected manual setup')
+    await ops('alice').removeMember(teamId, 'bob')
+    expect(secretOf(projectId)).not.toBe(seen.secret)
+    expect(db.rows.get(projectId)!.data).toMatchObject({ ghWebhook: '' })
+    // Events Bob forges with the old secret are refused.
+    expect(await deliver(projectId, 'ping', { zen: 'hi' }, seen.secret)).toMatchObject({ status: 401 })
+  })
+
+  it('a signed "issue closed" event finishes its task at once', async () => {
+    const { projectId, taskIds } = await seed()
+    await setMirroring(ops('alice'), projectId, gh, true, APP)
+    await setupWebhook(ops('alice'), projectId, gh, APP)
+    clock += 1_000
+    const closed = { ...gh.issues[1]!, state: 'closed' as const, author: 'carol' }
+    expect(await deliver(projectId, 'issues', { action: 'closed', issue: ghIssue(closed) })).toMatchObject({ status: 200 })
+    expect(db.rows.get(taskIds[1]!)!.data.status).toBe('done')
+    expect(db.rows.get(projectId)!.data).toMatchObject({ ghWebhookAt: clock })
+    // GitHub's ping when the webhook is added is answered too.
+    expect(await deliver(projectId, 'ping', { zen: 'Keep it logically awesome.' })).toMatchObject({ status: 200 })
+  })
+
+  it('ignores bad signatures, unknown projects, other repos and copied task markers', async () => {
+    const { projectId, taskIds } = await seed()
+    await setMirroring(ops('alice'), projectId, gh, true, APP)
+    await setupWebhook(ops('alice'), projectId, gh, APP)
+    const closed = ghIssue({ ...gh.issues[0]!, state: 'closed' })
+    expect(await deliver(projectId, 'issues', { action: 'closed', issue: closed }, 'not-the-secret')).toMatchObject({ status: 401 })
+    const body = JSON.stringify({ repository: { full_name: 'acme/web' }, action: 'closed', issue: closed })
+    expect(await receiveGithubWebhook(ops('system'), projectId, { event: 'issues', body, signature: '' })).toMatchObject({ status: 401 })
+    expect(await deliver('no-such-project', 'issues', { action: 'closed', issue: closed }, secretOf(projectId))).toMatchObject({ status: 401 })
+    // Signed, but about another repository: ignored.
+    const elsewhere = JSON.stringify({ repository: { full_name: 'mallory/web' }, action: 'closed', issue: closed })
+    const signed = await signGithubPayload(secretOf(projectId), elsewhere)
+    expect(await receiveGithubWebhook(ops('system'), projectId, { event: 'issues', body: elsewhere, signature: signed })).toMatchObject({ status: 200, body: { handled: 'ignored' } })
+    expect(db.rows.get(taskIds[0]!)!.data.status).toBe('ready')
+    // A stranger's issue carrying a copied marker, then closed: ignored, as in a sync.
+    const copy = ghIssue({ number: 70, title: 'copy', body: gh.issues[0]!.body, url: 'https://github.com/acme/web/issues/70', state: 'closed', labels: [], author: 'mallory', updatedAt: 'm' })
+    await deliver(projectId, 'issues', { action: 'closed', issue: copy })
+    expect(db.rows.get(taskIds[0]!)!.data.status).toBe('ready')
+  })
+
+  it('pull request events link the task and list the PR, and a merge approves it', async () => {
+    const { projectId, taskIds } = await seed()
+    await setMirroring(ops('alice'), projectId, gh, true, APP)
+    await setupWebhook(ops('alice'), projectId, gh, APP)
+    const pr: PullSummary = { number: 80, title: 'Theme tokens', body: 'Closes #1', url: 'https://github.com/acme/web/pull/80', state: 'open', merged: false, labels: [], author: 'alice-gh', updatedAt: 'p1' }
+    await deliver(projectId, 'pull_request', { action: 'opened', pull_request: ghIssue(pr, { merged: false, merged_at: null }) })
+    expect(db.rows.get(taskIds[0]!)!.data).toMatchObject({ prUrl: pr.url, prState: 'open' })
+    const listed = () => db.all('github_items').map((i) => i.data as unknown as GithubItem).find((i) => i.kind === 'pr' && i.number === 80)
+    expect(listed()?.linkedTaskId).toBe(taskIds[0])
+    const merged = ghIssue({ ...pr, state: 'closed', updatedAt: 'p2' }, { merged: true, merged_at: '2026-11-25T12:00:00Z' })
+    await deliver(projectId, 'pull_request', { action: 'closed', pull_request: merged })
+    expect(db.rows.get(taskIds[0]!)!.data).toMatchObject({ status: 'done', prState: 'merged' })
+    expect(listed()).toBeUndefined()
   })
 })

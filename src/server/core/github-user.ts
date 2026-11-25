@@ -46,6 +46,8 @@ export interface GitHubWriter {
   comment(owner: string, repo: string, number: number, body: string): Promise<void>
   listIssues(owner: string, repo: string): Promise<IssueSummary[]>
   listPulls(owner: string, repo: string): Promise<PullSummary[]>
+  /** Add a repository webhook (GitHub requires admin access to the repo). */
+  createWebhook(owner: string, repo: string, hook: { url: string; secret: string; events: string[] }): Promise<{ id: number }>
 }
 
 /** Find the GitHub payload inside Composio's envelope(s). */
@@ -75,7 +77,13 @@ function list(payload: unknown, key: string): Obj[] {
   return []
 }
 
-function toIssue(o: Obj): IssueSummary {
+/** A PR as GitHub's REST API and webhooks describe it. */
+export function toPull(o: Obj): PullSummary {
+  return { ...toIssue(o), merged: Boolean(o.merged_at) || o.merged === true }
+}
+
+/** An issue (or PR) as GitHub's REST API and webhooks describe it. */
+export function toIssue(o: Obj): IssueSummary {
   const user = isObj(o.user) ? o.user : {}
   return {
     number: Number(o.number),
@@ -156,7 +164,19 @@ export function userGithub(env: Env, jwt: string): GitHubClient & GitHubWriter {
     },
     async listPulls(owner, repo) {
       const items = list(await run('GITHUB_LIST_PULL_REQUESTS', { owner, repo, state: 'all', sort: 'updated', direction: 'desc', per_page: 50 }), 'pull_requests')
-      return items.map((o) => ({ ...toIssue(o), merged: Boolean(o.merged_at) || o.merged === true }))
+      return items.map(toPull)
+    },
+    async createWebhook(owner, repo, hook) {
+      const d = await run('GITHUB_CREATE_A_REPOSITORY_WEBHOOK', {
+        owner,
+        repo,
+        active: true,
+        events: hook.events,
+        config: { url: hook.url, content_type: 'json', secret: hook.secret, insecure_ssl: '0' },
+      })
+      const o = isObj(d) ? d : {}
+      if (!o.id) throw new Error('GitHub did not return the new webhook')
+      return { id: Number(o.id) }
     },
   }
 }

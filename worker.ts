@@ -26,6 +26,7 @@ import { tasks as cronTasks, runTask as runCronTask } from './src/cron.js'
 import { runJob } from './src/jobs.js'
 import { schemas } from './src/schemas.js'
 import { registerActionRoutes } from './src/server/action-routes.js'
+import { registerGithubWebhookRoutes } from './src/server/github-webhook-routes.js'
 import {
   registerAuthAndIntegrationRoutes,
   registerPlatformProxyRoutes,
@@ -135,6 +136,8 @@ app.use('*', async (c, next) => {
 registerAuthAndIntegrationRoutes(app)
 registerRealtimeRoutes(app)
 registerActionRoutes(app, resolveAuth)
+// GitHub calls this one, not a signed-in user: each delivery is checked by its signature.
+registerGithubWebhookRoutes(app)
 // Every scaffold exposes selected tools through HTTP, MCP and browser tools.
 // Only copilot owns the collections needed for the in-app chat UI.
 registerAgent(app, {

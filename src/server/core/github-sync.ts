@@ -15,7 +15,7 @@
 import { GITHUB_SYNC_MIN_GAP_MS } from './config'
 import type { GitHubWriter, IssueSummary, PullSummary } from './github-user'
 import { GithubNotConnected } from './github-user'
-import { clip, type Goal, type Ops, type Project, type Task, type TaskStatus } from './ops'
+import { clip, randomSecret, type Goal, type Ops, type Project, type Task, type TaskStatus } from './ops'
 import { OpsError, type Row } from './store'
 
 export const STATUS_TEXT: Record<TaskStatus, string> = {
@@ -145,58 +145,25 @@ export async function syncProject(ops: Ops, projectId: string, gh: GitHubWriter,
 
   try {
     const [issues, pulls] = await Promise.all([gh.listIssues(owner, repo), gh.listPulls(owner, repo)]).catch(notConnected)
-    const tasks = await ops.projectTasks(projectId)
-    const byId = new Map(tasks.map((t) => [t.recordId, t]))
-    const byIssue = new Map(tasks.filter((t) => t.data.issueNumber).map((t) => [t.data.issueNumber!, t]))
+    const index = await taskIndex(ops, projectId)
+    const { byId, byIssue } = index
 
     // In: issues closed on GitHub finish their task.
-    for (const issue of issues) {
-      const taskId = parseTaskMarker(issue.body)
-      const task = taskId ? byId.get(taskId) : undefined
-      if (!task || !isTasksIssue(task, issue)) continue
-      if (!task.data.issueNumber) {
-        await ops.store.update<Task>('tasks', task.recordId, { issueNumber: issue.number, issueUrl: issue.url })
-        task.data.issueNumber = issue.number
-        byIssue.set(issue.number, task)
-      }
-      if (issue.state === 'closed' && task.data.status !== 'done') {
-        await ops.markDone(task, issue.author || 'GitHub', `closed #${issue.number} on GitHub, so “${task.data.title}” is done`)
-        task.data.status = 'done'
-        result.doneFromGithub++
-      }
-    }
+    for (const issue of issues) if (await readIssue(ops, index, issue)) result.doneFromGithub++
 
     // In: PRs that name a task (or close its issue) are linked; merged ones approve it.
     const prLinks = new Map<string, string>()
     for (const pr of pulls) {
-      const { taskIds, closes } = parsePrLinks(pr.body)
-      const linked = new Set([...taskIds.filter((id) => byId.has(id)), ...closes.map((n) => byIssue.get(n)?.recordId).filter((x): x is string => !!x)])
-      for (const taskId of linked) {
-        prLinks.set(`${pr.number}`, taskId)
-        const task = byId.get(taskId)!
-        const state = pr.merged ? 'merged' : pr.state
-        if (task.data.prUrl !== pr.url || task.data.prState !== state) {
-          const firstLink = task.data.prUrl !== pr.url
-          await ops.store.update<Task>('tasks', taskId, { prUrl: pr.url, prState: state })
-          task.data.prUrl = pr.url
-          task.data.prState = state
-          if (firstLink) {
-            result.linkedPrs++
-            await ops.log({ teamId, projectId, taskId, kind: 'github', message: `linked PR #${pr.number} to “${task.data.title}”`, actorName: pr.author || 'GitHub' })
-          }
-        }
-        if (pr.merged) {
-          await ops.onPrMerged(taskId)
-          task.data.status = 'done'
-        }
-      }
+      const { linked, newLinks } = await readPull(ops, index, pr)
+      for (const taskId of linked) prLinks.set(`${pr.number}`, taskId)
+      result.linkedPrs += newLinks
     }
 
     // Out: mirror tasks as issues and push status changes.
     if (project.data.mirrorIssues) {
       const goals = new Map((await ops.store.query<Goal>('goals', { projectId })).map((g) => [g.recordId, g]))
       const issueLabels = new Map(issues.map((i) => [i.number, i.labels]))
-      const ordered = [...tasks].sort((a, b) => a.data.goalId.localeCompare(b.data.goalId) || a.data.order - b.data.order)
+      const ordered = [...byId.values()].sort((a, b) => a.data.goalId.localeCompare(b.data.goalId) || a.data.order - b.data.order)
       for (const task of ordered) {
         const goal = goals.get(task.data.goalId)
         if (!goal || goal.data.status === 'failed') continue
@@ -250,6 +217,119 @@ export async function syncProject(ops: Ops, projectId: string, gh: GitHubWriter,
     const message = e instanceof OpsError ? e.message : `GitHub sync failed: ${clip(e instanceof Error ? e.message : String(e), 200)}`
     await ops.store.update<Project>('projects', projectId, { ghSyncError: message })
     throw e instanceof OpsError ? e : new OpsError('github_sync_failed', message, 502)
+  }
+}
+
+/** A project's tasks by id and by GitHub issue number, for reading GitHub back (sync and webhooks). */
+export interface TaskIndex {
+  byId: Map<string, Row<Task>>
+  byIssue: Map<number, Row<Task>>
+}
+
+export async function taskIndex(ops: Ops, projectId: string): Promise<TaskIndex> {
+  const tasks = await ops.projectTasks(projectId)
+  return {
+    byId: new Map(tasks.map((t) => [t.recordId, t])),
+    byIssue: new Map(tasks.filter((t) => t.data.issueNumber).map((t) => [t.data.issueNumber!, t])),
+  }
+}
+
+/** Read one issue back: link a task to its own issue, and finish the task once the issue is closed. True if it finished one. */
+export async function readIssue(ops: Ops, index: TaskIndex, issue: IssueSummary): Promise<boolean> {
+  const taskId = parseTaskMarker(issue.body)
+  const task = taskId ? index.byId.get(taskId) : undefined
+  if (!task || !isTasksIssue(task, issue)) return false
+  if (!task.data.issueNumber) {
+    await ops.store.update<Task>('tasks', task.recordId, { issueNumber: issue.number, issueUrl: issue.url })
+    task.data.issueNumber = issue.number
+    index.byIssue.set(issue.number, task)
+  }
+  if (issue.state !== 'closed' || task.data.status === 'done') return false
+  await ops.markDone(task, issue.author || 'GitHub', `closed #${issue.number} on GitHub, so “${task.data.title}” is done`)
+  task.data.status = 'done'
+  return true
+}
+
+/** Read one PR back: link the tasks it names (Squadboard-Task: <id>, or Closes #<their issue>); a merged PR approves them. */
+export async function readPull(ops: Ops, index: TaskIndex, pr: PullSummary): Promise<{ linked: string[]; newLinks: number }> {
+  const { taskIds, closes } = parsePrLinks(pr.body)
+  const linked = [...new Set([...taskIds.filter((id) => index.byId.has(id)), ...closes.map((n) => index.byIssue.get(n)?.recordId).filter((x): x is string => !!x)])]
+  let newLinks = 0
+  for (const taskId of linked) {
+    const task = index.byId.get(taskId)!
+    const state = pr.merged ? 'merged' : pr.state
+    if (task.data.prUrl !== pr.url || task.data.prState !== state) {
+      const firstLink = task.data.prUrl !== pr.url
+      await ops.store.update<Task>('tasks', taskId, { prUrl: pr.url, prState: state })
+      task.data.prUrl = pr.url
+      task.data.prState = state
+      if (firstLink) {
+        newLinks++
+        await ops.log({ teamId: task.data.teamId, projectId: task.data.projectId, taskId, kind: 'github', message: `linked PR #${pr.number} to “${task.data.title}”`, actorName: pr.author || 'GitHub' })
+      }
+    }
+    if (pr.merged) {
+      await ops.applyPrMerged(task)
+      task.data.status = 'done'
+    }
+  }
+  return { linked, newLinks }
+}
+
+/** Keep the board's GitHub list in step with one issue or PR (from a webhook): listed while open, dropped once closed. */
+export async function refreshItem(ops: Ops, project: Row<Project>, kind: 'issue' | 'pr', i: IssueSummary | PullSummary, linkedTaskId: string): Promise<void> {
+  const [row] = await ops.store.query<GithubItem>('github_items', { key: `${project.recordId}:${kind}:${i.number}` })
+  if (i.state !== 'open') {
+    if (row) await ops.store.remove('github_items', row.recordId)
+    return
+  }
+  const fresh = item(project, kind, i, linkedTaskId)
+  if (row) await ops.store.update<GithubItem>('github_items', row.recordId, fresh)
+  else await ops.store.tryCreate<GithubItem>('github_items', fresh)
+}
+
+/** A project's GitHub webhook: the secret GitHub signs deliveries with (server-only), and the hook's id once added. */
+export interface WebhookRow {
+  teamId: string
+  projectId: string
+  secret: string
+  hookId: number
+  createdAt: number
+}
+
+export const webhookUrl = (appUrl: string, projectId: string) => `${appUrl}/api/github/webhook/${projectId}`
+
+export type WebhookSetup = { mode: 'auto'; url: string } | { mode: 'manual'; url: string; secret: string; reason: string }
+
+/**
+ * Have GitHub push issue and PR events to Squadboard as they happen, instead of waiting for someone to
+ * open the board. Adds the webhook as the member; GitHub only lets repo admins do that, so otherwise
+ * returns what an admin pastes into the repo's Settings → Webhooks. The signing secret is kept in a
+ * server-only collection and only ever shown to a member setting the webhook up by hand.
+ */
+export async function setupWebhook(ops: Ops, projectId: string, gh: GitHubWriter, appUrl: string): Promise<WebhookSetup> {
+  const project = await ops.loadForMember<Project>('projects', projectId, 'Project')
+  if (project.data.kind !== 'repo') throw new OpsError('not_a_repo', 'Only projects added from a GitHub repo can sync')
+  const { teamId, repoOwner: owner, repoName: repo } = project.data
+  const url = webhookUrl(appUrl, projectId)
+  let [row] = await ops.store.query<WebhookRow>('github_webhooks', { projectId })
+  // Already live (added by Squadboard, or by hand and receiving events): never show the secret again.
+  if (row?.data.hookId || project.data.ghWebhookAt) return { mode: 'auto', url }
+  if (!row) {
+    await ops.store.tryCreate<WebhookRow>('github_webhooks', { teamId, projectId, secret: randomSecret(), hookId: 0, createdAt: ops.now() })
+    ;[row] = await ops.store.query<WebhookRow>('github_webhooks', { projectId })
+    if (!row) throw new OpsError('webhook_failed', 'Could not prepare the webhook. Try again.', 500)
+  }
+  try {
+    const { id } = await gh.createWebhook(owner, repo, { url, secret: row.data.secret, events: ['issues', 'pull_request'] })
+    await ops.store.update<WebhookRow>('github_webhooks', row.recordId, { hookId: id })
+    await ops.store.update<Project>('projects', projectId, { ghWebhook: 'auto' })
+    await ops.log({ teamId, projectId, kind: 'github', message: `turned on live GitHub updates for ${owner}/${repo}` })
+    return { mode: 'auto', url }
+  } catch (e) {
+    if (e instanceof GithubNotConnected) notConnected(e)
+    await ops.store.update<Project>('projects', projectId, { ghWebhook: 'manual' })
+    return { mode: 'manual', url, secret: row.data.secret, reason: `Squadboard couldn't add the webhook as you: GitHub only lets admins of ${owner}/${repo} do that.` }
   }
 }
 

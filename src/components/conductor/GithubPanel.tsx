@@ -7,12 +7,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import { useQuery } from 'deepspace'
-import { CircleDot, ExternalLink, GitPullRequest, Github, RefreshCw } from 'lucide-react'
-import { Button, Switch, useToast } from '@/components/ui'
+import { CircleDot, Copy, ExternalLink, GitPullRequest, Github, RefreshCw } from 'lucide-react'
+import { Button, Input, Switch, useToast } from '@/components/ui'
+import { Mono } from '@/components/conductor/Page'
 import { cn } from '@/lib/utils'
 import { safeGithubUrl, timeAgo, type GithubItem, type Project, type Task } from '@/lib/conductor'
 import { expected } from '@/lib/expected'
 import type { Patch } from '@/lib/optimistic'
+import type { WebhookSetup } from '@/server/core/github-sync'
 
 type Rec<T> = { recordId: string; data: T }
 type Run = <T>(name: string, params?: Record<string, unknown>, opts?: { quiet?: boolean }) => Promise<T | null>
@@ -145,6 +147,7 @@ export function GithubPanel({
               <RefreshCw className={cn(pending === 'syncGithub' && 'animate-spin')} /> Sync now
             </Button>
           </div>
+          <LiveUpdates project={project} run={run} pending={pending} />
           <button type="button" onClick={connect} className="text-[11px] text-muted-foreground hover:text-foreground hover:underline">
             Reconnect GitHub (change which repositories Squadboard can use)
           </button>
@@ -204,6 +207,71 @@ export function GithubPanel({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * Live updates (decision #24): a GitHub webhook tells Squadboard about issue and PR changes as they
+ * happen. Squadboard adds it as the member when they're a repo admin; otherwise this shows the steps
+ * (and the signing secret) for an admin to add it by hand.
+ */
+function LiveUpdates({ project, run, pending }: { project: Rec<Project>; run: Run; pending: string | null }) {
+  const { success } = useToast()
+  const [manual, setManual] = useState<Extract<WebhookSetup, { mode: 'manual' }> | null>(null)
+  const { ghWebhook, ghWebhookAt } = project.data
+  return (
+    <div className="rounded-md border border-border p-2 text-[11px]" data-testid="live-updates">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-muted-foreground" data-testid="live-updates-status">
+          {ghWebhookAt
+            ? `Live updates on · last GitHub event ${timeAgo(ghWebhookAt)}`
+            : ghWebhook === 'auto'
+              ? 'Live updates on · waiting for the first GitHub event'
+              : 'Closed issues and merged PRs show up when someone opens the board. Live updates show them at once.'}
+        </span>
+        {!ghWebhookAt && ghWebhook !== 'auto' && (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-7 shrink-0 px-2 text-[11px]"
+            disabled={pending === 'setupGithubWebhook'}
+            data-testid="setup-webhook"
+            onClick={async () => {
+              const r = await run<WebhookSetup>('setupGithubWebhook', { projectId: project.recordId })
+              if (r?.mode === 'auto') {
+                setManual(null)
+                success('Live updates on', 'GitHub now tells Squadboard about issue and PR changes as they happen.')
+              }
+              if (r?.mode === 'manual') setManual(r)
+            }}
+          >
+            {ghWebhook === 'manual' ? 'Show setup' : 'Turn on'}
+          </Button>
+        )}
+      </div>
+      {manual && (
+        <div className="mt-2 space-y-1.5" data-testid="webhook-manual">
+          <p>{manual.reason} Ask one to open the repo's Settings → Webhooks → Add webhook and enter:</p>
+          <CopyField label="Payload URL" value={manual.url} />
+          <p>Content type: <Mono>application/json</Mono></p>
+          <CopyField label="Secret" value={manual.secret} />
+          <p>Events: “Let me select individual events”, then tick Issues and Pull requests. Keep the secret private.</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CopyField({ label, value }: { label: string; value: string }) {
+  const { success } = useToast()
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="w-20 shrink-0">{label}</span>
+      <Input readOnly value={value} aria-label={label} className="h-7 font-mono text-[11px]" onFocus={(e) => e.currentTarget.select()} />
+      <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" aria-label={`Copy ${label}`} onClick={() => navigator.clipboard.writeText(value).then(() => success(`${label} copied`))}>
+        <Copy />
+      </Button>
     </div>
   )
 }

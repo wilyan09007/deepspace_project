@@ -39,6 +39,7 @@ import {
   TEAMS_PER_USER_PER_DAY,
 } from './config'
 import type { GitHubClient } from './github'
+import type { WebhookRow } from './github-sync'
 import { OpsError, type Row, type Store } from './store'
 
 // ── Row shapes ─────────────────────────────────────────────────────────────
@@ -76,6 +77,10 @@ export interface Project {
   mirrorBy?: string
   ghSyncedAt?: number
   ghSyncError?: string
+  /** Live GitHub updates (webhook): 'auto' = Squadboard added it, 'manual' = a repo admin adds it by hand. */
+  ghWebhook?: '' | 'auto' | 'manual'
+  /** When the last signed webhook delivery arrived. */
+  ghWebhookAt?: number
 }
 export type GoalStatus = 'planning' | 'planned' | 'active' | 'done' | 'failed'
 export interface Goal {
@@ -201,6 +206,11 @@ export function clip(value: unknown, max: number): string {
   if (typeof value !== 'string') return ''
   const s = value.replace(/\u0000/g, '').trim()
   return s.length <= max ? s : s.slice(0, max - 1).trimEnd() + '…'
+}
+
+/** 32 random bytes as hex (webhook signing secrets). */
+export function randomSecret(): string {
+  return [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 function requireText(value: unknown, max: number, label: string): string {
@@ -484,6 +494,14 @@ export class Ops {
       if (!invite.data.usedBy && invite.data.expiresAt >= this.now()) {
         await this.store.update<Invite>('team_invites', invite.recordId, { expiresAt: this.now() - 1 })
       }
+    }
+    // A webhook set up by hand had its secret shown to members, so the removed one could forge GitHub
+    // events with it: give it a new secret, which a repo admin re-enters (Live updates → Turn on).
+    // Webhooks Squadboard added itself (hookId) never showed their secret to anyone.
+    for (const hook of await this.store.query<WebhookRow>('github_webhooks', { teamId })) {
+      if (hook.data.hookId) continue
+      await this.store.update<WebhookRow>('github_webhooks', hook.recordId, { secret: randomSecret() })
+      await this.store.update<Project>('projects', hook.data.projectId, { ghWebhook: '', ghWebhookAt: 0 })
     }
 
     const projects = new Set<string>()
@@ -934,7 +952,12 @@ export class Ops {
    * changed are told to pull/rebase before going further (merge alerts).
    */
   async onPrMerged(taskId: string): Promise<{ alerted: string[] }> {
-    const task = await this.loadForMember<Task>('tasks', taskId, 'Task')
+    return this.applyPrMerged(await this.loadForMember<Task>('tasks', taskId, 'Task'))
+  }
+
+  /** onPrMerged for a task the caller already checked access to (a member's sync, or a signed GitHub webhook). */
+  async applyPrMerged(task: Row<Task>): Promise<{ alerted: string[] }> {
+    const taskId = task.recordId
     if (task.data.status !== 'done') await this.markDone(task, 'Squadboard', `PR merged for “${task.data.title}”`)
     if (task.data.mergeAlerted) return { alerted: [] }
     const files = new Set([...(task.data.predictedFiles ?? []), ...(task.data.touchedFiles ?? [])])

@@ -33,6 +33,9 @@ overlaps, and lets anyone on the team steer any agent from one live board.
    from the issue, so you read and edit its text before agents get it. A PR whose description says
    `Closes #<issue>` or `Squadboard-Task: <id>` is linked to its task, and merging it approves the task.
    Closing a mirrored issue on GitHub finishes the task. Every card links its issue and PR.
+   **Live updates** (in the GitHub panel) add a GitHub webhook, so closed issues and merged PRs show up
+   at once instead of the next time someone opens the board. Squadboard adds it for repo admins and
+   shows the setup steps to everyone else. Each delivery is checked against a secret only the server holds.
 7. **Inbox.** One page per person: tasks waiting for review, agent questions, your agents that are
    paused, blocked or offline holding a task, and overlaps involving your agents, with a count in the nav.
 8. **Keeping work moving.** When a PR merges, agents working on files it changed get a "pull and
@@ -81,6 +84,7 @@ set up, and nothing bills the app owner.
 | Assistant message | the user chatting | the 18-message red-team run cost 42 credits in all (10 refused by the cheap guard, 8 answered by Sonnet with lookups) |
 | Adding a project, PR status refresh (max once per 10 min per project) | the user | < 1 credit |
 | GitHub sync (mirroring issues, reading issues/PRs) through your own GitHub connection | the user who opens the board / clicks | ~0.05¢ per GitHub call; a full live test of 68 calls cost $0.02 |
+| Live updates (GitHub webhook deliveries) | nobody (receiving one makes no GitHub calls) | free |
 | Demo agents, sample plan, board, agent tools | nobody | free |
 | Daily digest (scheduled or generated) | nobody (written without AI) | free |
 | **Email me** a digest | the user who clicks it | ~1.3¢ per email (platform email fee), 5/day per user |
