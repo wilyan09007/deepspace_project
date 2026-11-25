@@ -11,10 +11,12 @@ overlaps, and lets anyone on the team steer any agent from one live board.
 
 ## What it does
 
-1. **Plan a goal.** Write what you want ("Add dark mode to the settings page"). Conductor reads the
-   public GitHub repo and asks Claude to split the goal into 3–8 tasks, each with the files it will
+1. **Plan a goal.** Give it a **title** (a short name for your team, shown on the board and GitHub,
+   never sent to agents) and **instructions for agents** (what you want built). Conductor reads the
+   GitHub repo and asks Claude to split the instructions into 3–8 tasks, each with the files it will
    likely touch, an acceptance check, and dependencies. The plan is checked against the real file
-   tree, and import links between the predicted files are read from the source.
+   tree, and import links between the predicted files are read from the source. Agents receive the
+   instructions with every task.
 2. **Agents pick up work.** Each developer points their own agent at the board. `next_task` gives an
    agent the ready task that overlaps least with what other agents are doing.
 3. **Overlap warnings, not locks.** When two active tasks touch the same file, or files that import
