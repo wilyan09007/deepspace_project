@@ -319,3 +319,16 @@ describe('stale sweep', () => {
     expect((db.rows.get(d1)!.data as unknown as Agent).status).toBe('idle')
   })
 })
+
+describe('display names', () => {
+  it("falls back to the caller's token profile when their users row isn't written yet", async () => {
+    db.rows.delete('alice')
+    const withHint = new Ops({ store: new Store(db.as('alice')), userId: 'alice', now: () => clock, self: { name: 'Alice Token' } })
+    const { teamId } = await withHint.createTeam('Core')
+    expect(db.all('team_members')[0]!.data.userName).toBe('Alice Token')
+    // The hint only ever names the caller, never someone else.
+    expect(await withHint.userName('bob')).toBe('Bob')
+    expect(await new Ops({ store: new Store(db.as('zed')), userId: 'zed', now: () => clock }).userName()).toBe('Someone')
+    expect(teamId).toBeTruthy()
+  })
+})

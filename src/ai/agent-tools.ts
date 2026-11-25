@@ -20,7 +20,9 @@ const agentId = z.string().min(1).describe('The agent_id returned by register_ag
 /** Run an op and turn refusals into readable tool errors. */
 async function run<T>(context: AgentToolContext<Env>, fn: (ops: Ops) => Promise<T>): Promise<T> {
   try {
-    return await fn(makeOps(context.env, context.userId))
+    // The route verified this bearer token; it is only read here for the caller's display name.
+    const bearer = context.request.headers.get('Authorization')?.replace(/^Bearer /, '')
+    return await fn(makeOps(context.env, context.userId, undefined, bearer))
   } catch (e) {
     if (e instanceof OpsError) throw new AgentToolError(e.code, e.message, e.status)
     console.error(`[agent-tool] ${e instanceof Error ? e.stack ?? e.message : String(e)}`)

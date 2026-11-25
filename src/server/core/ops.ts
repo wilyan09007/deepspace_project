@@ -229,6 +229,12 @@ export interface OpsContext {
   now?: () => number
   /** GitHub reader billed to the caller (absent where no billed reads are allowed). */
   github?: GitHubClient
+  /**
+   * The caller's profile from their verified sign-in token. The users row is
+   * created asynchronously on first connect, so a brand-new user's first
+   * action can arrive before it exists.
+   */
+  self?: { name?: string; email?: string; image?: string }
 }
 
 /** What an agent sees about one overlap. */
@@ -268,6 +274,7 @@ export class Ops {
   readonly userId: string
   private readonly clock: () => number
   private readonly github?: GitHubClient
+  private readonly self?: OpsContext['self']
   private nameCache = new Map<string, string>()
 
   constructor(ctx: OpsContext) {
@@ -275,6 +282,7 @@ export class Ops {
     this.userId = ctx.userId
     this.clock = ctx.now ?? Date.now
     this.github = ctx.github
+    this.self = ctx.self
   }
 
   now(): number {
@@ -316,7 +324,12 @@ export class Ops {
     const cached = this.nameCache.get(userId)
     if (cached) return cached
     const row = await this.store.get<{ name?: string; email?: string }>('users', userId)
-    const name = clip(row?.data.name, MAX_NAME) || clip(row?.data.email?.split('@')[0], MAX_NAME) || 'Someone'
+    const hint = userId === this.userId ? this.self : undefined
+    const name =
+      clip(row?.data.name, MAX_NAME) ||
+      clip(hint?.name, MAX_NAME) ||
+      clip((row?.data.email ?? hint?.email)?.split('@')[0], MAX_NAME) ||
+      'Someone'
     this.nameCache.set(userId, name)
     return name
   }
@@ -362,7 +375,7 @@ export class Ops {
       status: 'active',
       role: 'owner',
       userName: await this.userName(),
-      userImage: clip(userRow?.data.imageUrl ?? userRow?.data.image, 500),
+      userImage: clip(userRow?.data.imageUrl ?? userRow?.data.image ?? this.self?.image, 500),
       digestOptIn: 0,
     })
     await this.log({ teamId, kind: 'team', message: `created the team “${teamName}”` })

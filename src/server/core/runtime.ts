@@ -14,12 +14,34 @@ import { githubClient } from './github'
 import { Ops } from './ops'
 import { Store } from './store'
 
-export function makeOps(env: Env, userId: string, payerJwt?: string): Ops {
+/**
+ * Display claims from a JWT the route has ALREADY verified (never use this to
+ * authenticate). Only used to name a user whose users row isn't written yet.
+ */
+export function profileFromVerifiedJwt(jwt: string | undefined): { name?: string; email?: string; image?: string } | undefined {
+  if (!jwt) return undefined
+  try {
+    const part = jwt.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/')
+    const json = new TextDecoder().decode(Uint8Array.from(atob(part.padEnd(part.length + ((4 - (part.length % 4)) % 4), '=')), (c) => c.charCodeAt(0)))
+    const claims = JSON.parse(json) as Record<string, unknown>
+    const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
+    return { name: str(claims.name), email: str(claims.email), image: str(claims.image) }
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * `payerJwt` enables user-billed GitHub reads; `identityJwt` (the caller's
+ * verified token) only supplies their display name.
+ */
+export function makeOps(env: Env, userId: string, payerJwt?: string, identityJwt?: string): Ops {
   const store = new Store(createActionTools(env, userId, payerJwt ?? ''))
   return new Ops({
     store,
     userId,
     github: payerJwt ? githubClient(env, { kind: 'user', jwt: payerJwt }) : undefined,
+    self: profileFromVerifiedJwt(identityJwt ?? payerJwt),
   })
 }
 

@@ -186,7 +186,7 @@ export function registerAiChatRoutes(app: Hono<AppContext>, resolveAccess: Resol
       return c.json({ error: 'Chat not found' }, 404)
     }
 
-    const ops = makeOps(c.env, auth.userId)
+    const ops = makeOps(c.env, auth.userId, undefined, jwt)
     try {
       await ops.bump('assistant', ASSISTANT_MESSAGES_PER_HOUR, hourKey(Date.now()))
     } catch (e) {

@@ -55,14 +55,14 @@ async function plan(ctx: Ctx, goalId: string) {
 }
 
 export const actions: Record<string, ActionHandler<Env>> = {
-  createTeam: action(({ env, userId, params }) => makeOps(env, userId).createTeam(params.name)),
+  createTeam: action(({ env, userId, callerJwt, params }) => makeOps(env, userId, undefined, callerJwt).createTeam(params.name)),
 
-  createInvite: action(({ env, userId, params }) => makeOps(env, userId).createInvite(str(params.teamId))),
+  createInvite: action(({ env, userId, callerJwt, params }) => makeOps(env, userId, undefined, callerJwt).createInvite(str(params.teamId))),
 
-  joinTeam: action(({ env, userId, params }) => makeOps(env, userId).joinTeam(params.code)),
+  joinTeam: action(({ env, userId, callerJwt, params }) => makeOps(env, userId, undefined, callerJwt).joinTeam(params.code)),
 
-  setDigestOptIn: action(({ env, userId, params }) =>
-    makeOps(env, userId).setDigestOptIn(str(params.teamId), params.on === true),
+  setDigestOptIn: action(({ env, userId, callerJwt, params }) =>
+    makeOps(env, userId, undefined, callerJwt).setDigestOptIn(str(params.teamId), params.on === true),
   ),
 
   createProject: action(({ env, userId, callerJwt, params }) =>
@@ -85,16 +85,16 @@ export const actions: Record<string, ActionHandler<Env>> = {
     return plan(ctx, goal.recordId)
   }),
 
-  sendDirective: action(({ env, userId, params }) =>
-    makeOps(env, userId).sendDirective(str(params.agentId), params.kind, params.text),
+  sendDirective: action(({ env, userId, callerJwt, params }) =>
+    makeOps(env, userId, undefined, callerJwt).sendDirective(str(params.agentId), params.kind, params.text),
   ),
 
-  answerQuestion: action(({ env, userId, params }) =>
-    makeOps(env, userId).answerQuestion(str(params.questionId), params.answer),
+  answerQuestion: action(({ env, userId, callerJwt, params }) =>
+    makeOps(env, userId, undefined, callerJwt).answerQuestion(str(params.questionId), params.answer),
   ),
 
-  setOverlapStatus: action(({ env, userId, params }) =>
-    makeOps(env, userId).setOverlapStatus(str(params.overlapId), params.status),
+  setOverlapStatus: action(({ env, userId, callerJwt, params }) =>
+    makeOps(env, userId, undefined, callerJwt).setOverlapStatus(str(params.overlapId), params.status),
   ),
 
   /** Called when a member opens the board; throttled per project (decision #17). */
@@ -102,8 +102,8 @@ export const actions: Record<string, ActionHandler<Env>> = {
     makeOps(env, userId, callerJwt).refreshPrs(str(params.projectId)),
   ),
 
-  startDemo: action(async ({ env, userId, params }) => {
-    const ops = makeOps(env, userId)
+  startDemo: action(async ({ env, userId, callerJwt, params }) => {
+    const ops = makeOps(env, userId, undefined, callerJwt)
     const payload = await prepareDemo(ops, str(params.projectId))
     const jobId = await enqueueJob(env.JOB_ROOMS, `app:${env.DEEPSPACE_APP_ID}`, 'demo-run', payload, {
       enqueuedBy: userId,
@@ -112,18 +112,18 @@ export const actions: Record<string, ActionHandler<Env>> = {
     return { jobId, goalId: payload.goalId }
   }),
 
-  stopDemo: action(({ env, userId, params }) => requestStopDemo(makeOps(env, userId), str(params.projectId))),
+  stopDemo: action(({ env, userId, callerJwt, params }) => requestStopDemo(makeOps(env, userId, undefined, callerJwt), str(params.projectId))),
 
   sampleStatus: action(async () => ({ available: sampleAvailable() })),
 
-  loadSample: action(({ env, userId, params }) => loadSample(makeOps(env, userId), str(params.teamId))),
+  loadSample: action(({ env, userId, callerJwt, params }) => loadSample(makeOps(env, userId, undefined, callerJwt), str(params.teamId))),
 
   /** A goal's plan as JSON (members only). */
-  exportPlan: action(({ env, userId, params }) => exportPlan(makeOps(env, userId), str(params.goalId))),
+  exportPlan: action(({ env, userId, callerJwt, params }) => exportPlan(makeOps(env, userId, undefined, callerJwt), str(params.goalId))),
 
   /** Dev/test only: a fixed plan for exercising the board without billing. Refused in production. */
-  devSeedFixture: action(async ({ env, userId, params }) => {
+  devSeedFixture: action(async ({ env, userId, callerJwt, params }) => {
     if (env.ALLOW_DEBUG_ROUTES !== 'true') throw new OpsError('not_found', 'Not available', 404)
-    return seedDevFixture(makeOps(env, userId), str(params.teamId))
+    return seedDevFixture(makeOps(env, userId, undefined, callerJwt), str(params.teamId))
   }),
 }
