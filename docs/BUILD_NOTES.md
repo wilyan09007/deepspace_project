@@ -17,7 +17,8 @@ Unit tests before the app is registered: the repo's `vitest.config.ts` refuses t
 saved as `.mjs` in the scratchpad, run with `npx vitest run --config <file>`.
 
 Branches: session 1 worked on `claude/eloquent-ptolemy-w86k06`; session 2 continues on
-`claude/awesome-hypatia-2rmia9` (contains everything from session 1).
+`claude/awesome-hypatia-2rmia9` (contains everything from session 1). Deploys ship this checkout's
+working tree (GitHub source): `npx deepspace deploy`.
 
 ## Build plan — phases, done-criteria, status
 
@@ -34,10 +35,25 @@ Status: ✅ done · 🔨 in progress · ⬜ not started · ⚠️ changed (see P
 | 7 | Assistant (ai-chat feature + guardrails) | separate assistant tool set; guard classifier; server-enforced confirmation; red-team prompts file; guard parsing unit-tested | ✅ 10 tests; live red-team run is phase 10 |
 | 8 | UI | landing, teams, join, team page, board (goals, tasks, agents, overlaps, questions, activity, directives), connect page, assistant drawer, own theme | ✅ screenshots reviewed (desktop + mobile) |
 | 9 | Local run | `deepspace dev start` boots; core loop clicked through in a browser with Playwright (no billed calls: sample plan + demo) | ✅ 2 Conductor e2e + 6 scaffold specs; CLI agent tools verified locally |
-| 10 | Live | first deploy (latches GitHub source), capture one real plan for the sample (user-billed, cents), live smoke, red-team set once | ⬜ |
-| 11 | Docs | README (what, how to connect an agent, billing, guardrails, limits), decision log final | ⬜ |
+| 10 | Live | first deploy (latches GitHub source), capture one real plan for the sample (user-billed, cents), live smoke, red-team set once | ✅ https://conductor.app.space; 3 live browser tests; CLI agent loop; red-team 18/18 |
+| 11 | Docs | README (what, how to connect an agent, billing, guardrails, limits), decision log final | ✅ |
 
 ## Plan changes (newest first)
+
+- **Phase 10 (live), 2026-11-25:** first deploy latched GitHub `wilyan09007/deepspace_project` as the
+  permanent source. Billed steps ran as the owner through the CLI's cached token
+  (`~/.deepspace/token`, written from `DEEPSPACE_SESSION`): sample capture 13 credits (planner
+  $0.11 + GitHub $0.02), red-team 42 credits, total 55 of 500. Test accounts are on a `test`
+  billing tier with **no credits**, so they can't exercise billed paths (now a live test: they get
+  the plain out-of-credits message). Live testing found and fixed two bugs: new users named
+  "Someone" (users row written asynchronously → fall back to the verified token's name) and a
+  generic error for no credits (→ `isCreditError` + `NO_CREDITS_MESSAGE`). The assistant made up
+  a nonexistent "report overlap" tool when asked how to connect → its prompt now carries the exact
+  how-to facts. Owner's live data: team "Conductor sample", project RealWorld React app, agent
+  `cli-check` (task released, planted red-team question answered).
+- **Still to confirm live:** the connect-question reply after the prompt fix (the run hit the
+  assistant's own 20/hour limit); the stale sweep marking `cli-check` offline (~15 min after
+  01:14 UTC); the first daily digest at 22:00 UTC.
 
 - **Phases 8–9:** app registered as `conductor` (`app_01M8832W6C974BDDJ39RHF79Q4`) because builds and
   `dev start` need a real app id; registering is free and does not deploy or latch the source.
