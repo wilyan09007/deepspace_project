@@ -16,6 +16,7 @@ import { resetGoalForRetry, runPlanner, type PlannerDeps } from '../server/core/
 import { makeOps, userModel } from '../server/core/runtime'
 import { seedDevFixture } from '../server/core/fixtures'
 import { exportPlan, loadSample, sampleAvailable } from '../server/core/sample'
+import { isCreditError, NO_CREDITS_MESSAGE } from '../server/core/integration'
 import { OpsError } from '../server/core/store'
 
 type Ctx = ActionContext<Env>
@@ -28,6 +29,7 @@ function action(fn: (ctx: Ctx) => Promise<unknown>): ActionHandler<Env> {
       return { success: true, data: (await fn(ctx)) ?? {} } as ActionResult
     } catch (e) {
       if (e instanceof OpsError) return { success: false, error: e.message, code: e.code } as ActionResult
+      if (isCreditError(e)) return { success: false, error: NO_CREDITS_MESSAGE, code: 'no_credits' } as ActionResult
       console.error(`[action] ${e instanceof Error ? e.stack ?? e.message : String(e)}`)
       return { success: false, error: 'Something went wrong. Please try again.', code: 'internal' } as ActionResult
     }

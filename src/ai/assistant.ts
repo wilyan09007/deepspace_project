@@ -17,6 +17,7 @@ import { tool, type ToolSet } from 'ai'
 import { z } from 'zod/v4'
 import { dayKey } from '../server/core/engine'
 import { clip, type Agent, type EventRow, type Goal, type Ops, type OverlapRow, type Project, type Question, type Task } from '../server/core/ops'
+import { isCreditError, NO_CREDITS_MESSAGE } from '../server/core/integration'
 import { OpsError } from '../server/core/store'
 
 // ── 1. Limits ────────────────────────────────────────────────────────────
@@ -89,7 +90,7 @@ export async function screenMessage(
     reply = await classify({ system: GUARD_SYSTEM, prompt: buildGuardPrompt(message, previousAssistant) })
   } catch (e) {
     console.error(`[assistant] guard failed: ${e instanceof Error ? e.message : String(e)}`)
-    return { allowed: false, reply: REFUSAL_GUARD_ERROR, reason: 'guard_error' }
+    return { allowed: false, reply: isCreditError(e) ? NO_CREDITS_MESSAGE : REFUSAL_GUARD_ERROR, reason: 'guard_error' }
   }
   const verdict = parseGuardReply(reply)
   if (verdict.injection) return { allowed: false, reply: REFUSAL_INJECTION, reason: 'injection' }

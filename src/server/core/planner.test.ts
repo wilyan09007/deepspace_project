@@ -125,3 +125,12 @@ describe('buildPlannerPrompt', () => {
     expect(p).toContain('(no README)')
   })
 })
+
+describe('out of credits', () => {
+  it('records a plain message on the goal', async () => {
+    const { goalId } = await seedGoal()
+    const gh = { ...github(), getTree: async () => { throw Object.assign(new Error('Insufficient credits.'), { status: 402 }) } }
+    await expect(runPlanner(ops('alice'), goalId, { github: gh, modelId: 'm', generate: async () => '' })).rejects.toBeInstanceOf(OpsError)
+    expect((db.rows.get(goalId)!.data as unknown as Goal).planError).toMatch(/out of credits/)
+  })
+})

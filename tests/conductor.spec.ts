@@ -98,3 +98,11 @@ test('board: demo agents work, overlap and ask; a teammate answers and steers li
   await expect(alice!.page.getByTestId('start-demo')).toBeVisible({ timeout: 30_000 })
   await expect(bob!.page.getByTestId('activity-feed')).toContainText('demo run ended', { timeout: 30_000 })
 })
+
+test('billing: a user without credits is told plainly (test accounts have none)', async ({ users }) => {
+  const [alice] = await users(['Alice'])
+  await createTeam(alice!, `Credits ${Date.now().toString(36)}`)
+  await alice!.page.getByPlaceholder(/owner\/repo/).fill('gothinkster/react-redux-realworld-example-app')
+  await alice!.page.getByRole('button', { name: 'Add project' }).click()
+  await expect(alice!.page.getByText(/out of credits/)).toBeVisible({ timeout: 20_000 })
+})

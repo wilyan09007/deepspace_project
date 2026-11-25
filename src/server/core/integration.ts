@@ -46,3 +46,15 @@ export async function callIntegration<T>(env: Env, payer: Payer, endpoint: strin
   }
   return ('data' in payload ? payload.data : payload) as T
 }
+
+export const NO_CREDITS_MESSAGE =
+  'Your DeepSpace account is out of credits, so this can’t run. Free accounts get 500 credits a month; see dashboard.deep.space.'
+
+/** True for a platform refusal because the payer has no credits left (integrations or AI). */
+export function isCreditError(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false
+  const err = e as { status?: number; statusCode?: number; message?: string; code?: string; responseBody?: string }
+  if (err.status === 402 || err.statusCode === 402) return true
+  const text = `${err.code ?? ''} ${err.message ?? ''} ${err.responseBody ?? ''}`
+  return /insufficient[_ ]credits|out of credits|payment required/i.test(text)
+}

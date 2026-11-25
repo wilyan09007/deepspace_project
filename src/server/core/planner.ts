@@ -22,6 +22,7 @@ import {
   type ValidatedPlan,
 } from './engine'
 import type { GitHubClient } from './github'
+import { isCreditError, NO_CREDITS_MESSAGE } from './integration'
 import { clip, type Goal, type Ops, type Project, type Task } from './ops'
 import { OpsError, type Row } from './store'
 
@@ -186,8 +187,11 @@ export async function runPlanner(ops: Ops, goalId: string, deps: PlannerDeps): P
     const taskIds = await savePlan(ops, goal, plan, edges, deps.modelId)
     return { taskIds }
   } catch (e) {
-    const message =
-      e instanceof OpsError ? e.message : `Planning failed: ${clip(e instanceof Error ? e.message : String(e), 300)}`
+    const message = e instanceof OpsError
+      ? e.message
+      : isCreditError(e)
+        ? NO_CREDITS_MESSAGE
+        : `Planning failed: ${clip(e instanceof Error ? e.message : String(e), 300)}`
     await ops.store.update<Goal>('goals', goalId, { status: 'failed', planStage: 'failed', planError: message })
     throw e instanceof OpsError ? e : new OpsError('plan_failed', message, 502)
   }

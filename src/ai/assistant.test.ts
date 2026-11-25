@@ -143,3 +143,10 @@ describe('assistant tools', () => {
     expect(isConfirmation('no')).toBe(false)
   })
 })
+
+describe('guard when the user has no credits', () => {
+  it('says so instead of a generic error', async () => {
+    const r = await screenMessage('what is codex doing?', '', async () => { throw Object.assign(new Error('Insufficient credits.'), { status: 402 }) })
+    expect(r).toMatchObject({ allowed: false, reply: expect.stringMatching(/out of credits/) })
+  })
+})

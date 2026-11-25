@@ -8,7 +8,7 @@ import { chromiumLaunchOptions } from 'deepspace/testing'
 
 export default defineConfig({
   testDir: '.',
-  testMatch: 'conductor.spec.ts',
+  testMatch: process.env.LIVE_SPEC ?? 'conductor.spec.ts',
   timeout: 60_000,
   retries: 0,
   use: { baseURL: process.env.LIVE_URL ?? 'https://conductor.app.space', headless: true, launchOptions: chromiumLaunchOptions() },
