@@ -134,13 +134,17 @@ test('new goal: the button opens the dialog, planning starts, and its outcome sh
   const dialog = page.getByRole('dialog', { name: 'New goal' })
   await expect(dialog).toBeVisible()
   await expect(dialog.getByRole('button', { name: 'Plan it' })).toBeDisabled()
-  await dialog.getByLabel('Goal').fill('Add a dark mode toggle')
-  await dialog.getByLabel('Details (optional)').fill('Persist the choice.')
+  await dialog.getByLabel('Title').fill('Add a dark mode toggle')
+  // A title alone isn't enough: the instructions are what agents get.
+  await expect(dialog.getByRole('button', { name: 'Plan it' })).toBeDisabled()
+  await dialog.getByLabel('Instructions for agents').fill('Add a dark mode toggle to Settings and persist the choice.')
+  if (process.env.SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.SCREENSHOT_DIR}/new-goal.png` })
   await dialog.getByRole('button', { name: 'Plan it' }).click()
 
   // The goal appears at once with its live planning status…
   await expect(page.getByRole('tab', { name: /Add a dark mode toggle/ })).toBeVisible({ timeout: 10_000 })
   await expect(page.getByTestId('goal-header')).toContainText('Add a dark mode toggle')
+  await expect(page.getByTestId('goal-instructions')).toHaveText('Add a dark mode toggle to Settings and persist the choice.')
   // …and the planner really ran: test accounts have no credits, so it stops at the first paid GitHub read
   // and the board says so, with a Retry button.
   await expect(page.getByTestId('goal-header')).toContainText(/out of credits/, { timeout: 30_000 })

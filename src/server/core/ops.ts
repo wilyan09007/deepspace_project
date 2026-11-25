@@ -294,7 +294,8 @@ export interface TaskView {
   predictedFiles: string[]
   touchedFiles: string[]
   status: TaskStatus
-  goalTitle?: string
+  /** The goal's instructions (its title is for people and isn't sent to agents). */
+  goalInstructions?: string
   repo?: string
   branch?: string
   issue?: { number: number; url: string } | null
@@ -532,12 +533,14 @@ export class Ops {
 
   async createGoal(projectId: string, title: unknown, body: unknown): Promise<{ goalId: string; project: Row<Project> }> {
     const project = await this.loadForMember<Project>('projects', projectId, 'Project')
-    const goalTitle = requireText(title, MAX_TITLE, 'Goal')
+    // Title: a short name for people. Instructions: what to build — the only goal text the planner and agents get.
+    const goalTitle = requireText(title, MAX_TITLE, 'Title')
+    const instructions = requireText(body, MAX_GOAL_BODY, 'Instructions')
     const goalId = await this.store.create<Goal>('goals', {
       teamId: project.data.teamId,
       projectId,
       title: goalTitle,
-      body: clip(body, MAX_GOAL_BODY),
+      body: instructions,
       status: 'planning',
       planStage: 'queued',
       createdByName: await this.userName(),
@@ -625,7 +628,7 @@ export class Ops {
     ])
     const history = await this.taskHistory(row.recordId)
     return this.taskView(row, {
-      goalTitle: goal?.data.title,
+      goalInstructions: clip(goal?.data.body, 1500) || undefined,
       repo: project ? `${project.data.repoOwner}/${project.data.repoName}` : undefined,
       branch: project?.data.defaultBranch,
       // Only worth sending when someone else worked on it before (handoff).

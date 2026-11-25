@@ -97,7 +97,7 @@ describe('timing rules', () => {
 
   it(`a goal stuck "planning" can be retried after ${STALE_PLANNING_MS / MIN} minutes, not before`, async () => {
     const { projectId } = await projectWithTask()
-    const { goalId } = await ops('alice').createGoal(projectId, 'Stuck goal', '')
+    const { goalId } = await ops('alice').createGoal(projectId, 'Stuck goal', 'Do the stuck thing.')
     // The fake store stamps updatedAt from its own clock; pin it to "now" for this goal.
     db.rows.get(goalId)!.updatedAt = new Date(clock).toISOString()
     clock += STALE_PLANNING_MS - MIN

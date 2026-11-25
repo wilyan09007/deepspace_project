@@ -288,7 +288,9 @@ export async function goalFromIssue(ops: Ops, projectId: string, issueNumber: nu
   const [row] = await ops.store.query<GithubItem>('github_items', { key: `${project.recordId}:issue:${issueNumber}` })
   if (!row) throw new OpsError('not_found', `Issue #${issueNumber} isn't in the synced list — click Sync first`, 404)
   const issue = row.data
-  const { goalId } = await ops.createGoal(projectId, issue.title, `${issue.body}\n\n(From GitHub issue #${issue.number}: ${issue.url})`.trim())
+  // The issue title names the goal; its description (or, if empty, its title) is the instructions.
+  const instructions = `${issue.body.trim() || issue.title}\n\n(From GitHub issue #${issue.number}: ${issue.url})`
+  const { goalId } = await ops.createGoal(projectId, issue.title, instructions)
   await ops.store.update<Goal>('goals', goalId, { sourceIssueNumber: issue.number, sourceIssueUrl: issue.url })
   return { goalId, issue }
 }

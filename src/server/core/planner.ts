@@ -51,8 +51,8 @@ export function buildPlannerPrompt(input: {
   repo: string
   branch: string
   description: string
-  goalTitle: string
-  goalBody: string
+  /** The goal's instructions — the only goal text the planner sees (its title is for people). */
+  instructions: string
   readme: string
   paths: string[]
   truncated: boolean
@@ -62,8 +62,7 @@ export function buildPlannerPrompt(input: {
     input.description ? `Description: ${clip(input.description, 300)}` : '',
     '</repository>',
     '<goal>',
-    `Title: ${input.goalTitle}`,
-    input.goalBody ? `Details:\n${input.goalBody}` : '',
+    input.instructions,
     '</goal>',
     '<readme>',
     clip(input.readme, 4000) || '(no README)',
@@ -166,8 +165,8 @@ export async function runPlanner(ops: Ops, goalId: string, deps: PlannerDeps): P
         repo: `${owner}/${repo}`,
         branch,
         description: project.data.description ?? '',
-        goalTitle: goal.data.title,
-        goalBody: goal.data.body ?? '',
+        // Older goals may have no instructions; fall back to the title only then.
+        instructions: goal.data.body?.trim() || goal.data.title,
         readme,
         paths: filtered.paths,
         truncated: filtered.truncated || tree.truncated,

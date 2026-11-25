@@ -256,7 +256,12 @@ function GoalHeader({ goal, onRetry, retrying }: { goal: { recordId: string; dat
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <h2 className="font-semibold">{g.title}</h2>
-          {g.body && <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-sm text-muted-foreground">{g.body}</p>}
+          {g.body && (
+            <div className="mt-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Instructions for agents</p>
+              <p className="mt-0.5 line-clamp-4 whitespace-pre-wrap text-sm" data-testid="goal-instructions">{g.body}</p>
+            </div>
+          )}
         </div>
         <span className="text-xs text-muted-foreground">
           {GOAL_STATUS[g.status]}
@@ -298,21 +303,30 @@ function NewGoalModal({ open, onClose, onSubmit }: { open: boolean; onClose: () 
       <form onSubmit={submit}>
         <Modal.Header>
           <Modal.Title>New goal</Modal.Title>
-          <Modal.Description>Conductor reads the repository and plans tasks for your agents. Planning uses your own DeepSpace credits (one Claude call plus a few GitHub reads).</Modal.Description>
+          <Modal.Description>Conductor reads the repository and plans your instructions into tasks for agents. Planning uses your own DeepSpace credits (one Claude call plus a few GitHub reads).</Modal.Description>
         </Modal.Header>
-        <Modal.Body className="space-y-3">
+        <Modal.Body className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="goal-title">Goal</Label>
-            <Input id="goal-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={140} placeholder="Add dark mode to the settings page" autoFocus />
+            <Label htmlFor="goal-title">Title</Label>
+            <Input id="goal-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={140} placeholder="Dark mode" autoFocus />
+            <p className="text-xs text-muted-foreground">A short name for your team, shown on the board and GitHub. Agents never see it.</p>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="goal-body">Details (optional)</Label>
-            <Textarea id="goal-body" value={body} onChange={(e) => setBody(e.target.value)} maxLength={4000} rows={4} placeholder="Constraints, acceptance criteria, files to avoid…" />
+            <Label htmlFor="goal-body">Instructions for agents</Label>
+            <Textarea
+              id="goal-body"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              maxLength={4000}
+              rows={6}
+              placeholder={'Add a dark mode toggle to the Settings page. Save the choice so it survives a reload, and apply it to every page.\nDon\'t change the existing light colours.'}
+            />
+            <p className="text-xs text-muted-foreground">What you want built: the planner turns this into tasks, and every agent working on them reads it. Include constraints and how you'll know it's done.</p>
           </div>
         </Modal.Body>
         <Modal.Footer>
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={title.trim().length < 3}>Plan it</Button>
+          <Button type="submit" disabled={!title.trim() || body.trim().length < 10}>Plan it</Button>
         </Modal.Footer>
       </form>
     </Modal>
