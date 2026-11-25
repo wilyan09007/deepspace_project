@@ -122,7 +122,7 @@ export default function BoardPage() {
             aria-selected={g.recordId === goal?.recordId}
             onClick={() => setPickedGoal(g.recordId)}
             className={cn(
-              'max-w-[18rem] truncate rounded-full border px-3 py-1 text-xs transition-colors',
+              'max-w-full truncate rounded-full border px-3 py-1 text-xs transition-colors sm:max-w-[28rem]',
               g.recordId === goal?.recordId ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:text-foreground',
             )}
           >
@@ -151,7 +151,7 @@ export default function BoardPage() {
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         {/* Task columns */}
-        <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4" data-testid="task-columns">
+        <div className="grid content-start gap-3 sm:grid-cols-2 xl:grid-cols-4" data-testid="task-columns">
           {COLUMNS.map((col) => {
             const items = goalTasks.filter((t) => (col.statuses as readonly string[]).includes(t.data.status))
             return (

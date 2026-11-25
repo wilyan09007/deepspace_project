@@ -79,8 +79,8 @@ describe('teams and invites', () => {
 
   it('rate-limits team creation per user per day', async () => {
     const alice = ops('alice')
-    for (let i = 0; i < 5; i++) await alice.createTeam(`T${i}`)
-    await expectCode(alice.createTeam('T6'), 'rate_limited')
+    for (let i = 0; i < 20; i++) await alice.createTeam(`T${i}`)
+    await expectCode(alice.createTeam("T21"), "rate_limited")
     clock += 24 * 3600 * 1000
     await expect(alice.createTeam('T6')).resolves.toBeTruthy()
   })

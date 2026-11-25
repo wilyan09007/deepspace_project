@@ -70,9 +70,15 @@ export default function Navigation() {
   return (
     <>
       <nav data-testid="app-navigation" className="border-b border-border bg-background">
-        <div className="mx-auto flex h-12 max-w-7xl items-center gap-4 px-4">
-          <Link to="/home" className="text-sm font-semibold text-foreground">
-            {APP_NAME}
+        <div className="mx-auto flex h-12 max-w-[1500px] items-center gap-4 px-4 sm:px-6">
+          <Link to="/teams" className="flex items-center gap-2 text-sm font-semibold text-foreground" aria-label={`${APP_NAME} home`}>
+            <span className="grid h-6 w-6 place-items-center rounded-md bg-primary text-primary-foreground" aria-hidden>
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                <path d="M4 20 L17 7" />
+                <circle cx="18.5" cy="5.5" r="2" fill="currentColor" stroke="none" />
+              </svg>
+            </span>
+            Conductor
           </Link>
 
           <div className="hidden items-center md:flex">{visibleNav.map(navLink)}</div>

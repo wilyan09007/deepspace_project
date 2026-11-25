@@ -6,7 +6,7 @@
 /** Planner runs per user per UTC day (users pay, but this stops runaway clicks). */
 export const PLANNER_RUNS_PER_USER_PER_DAY = 10
 /** Teams one user may create per UTC day. */
-export const TEAMS_PER_USER_PER_DAY = 5
+export const TEAMS_PER_USER_PER_DAY = 20
 /** Invite links one user may create per UTC day. */
 export const INVITES_PER_USER_PER_DAY = 20
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000

@@ -32,12 +32,21 @@ Status: ✅ done · 🔨 in progress · ⬜ not started · ⚠️ changed (see P
 | 5 | Wiring: export `createActionTools`; server actions; agent tools (`buildTools`); JobRoom locked to admins | type-check passes; each action/tool is a thin wrapper over ops | ✅ (live-verified in phase 9/10) |
 | 6 | Demo job + cron (stale sweep, daily digest) | demo script drives 3 agents through ops incl. 1 overlap, 1 question, obeys directives; digest is AI-free; email capped | ✅ 6 tests |
 | 7 | Assistant (ai-chat feature + guardrails) | separate assistant tool set; guard classifier; server-enforced confirmation; red-team prompts file; guard parsing unit-tested | ✅ 10 tests; live red-team run is phase 10 |
-| 8 | UI | landing, teams, join, team page, board (goals, tasks, agents, overlaps, questions, activity, directives), connect page, assistant drawer, own theme | ⬜ |
-| 9 | Local run | `deepspace dev start` boots; core loop clicked through in a browser with Playwright (no billed calls: sample plan + demo) | ⬜ |
+| 8 | UI | landing, teams, join, team page, board (goals, tasks, agents, overlaps, questions, activity, directives), connect page, assistant drawer, own theme | ✅ screenshots reviewed (desktop + mobile) |
+| 9 | Local run | `deepspace dev start` boots; core loop clicked through in a browser with Playwright (no billed calls: sample plan + demo) | ✅ 2 Conductor e2e + 6 scaffold specs; CLI agent tools verified locally |
 | 10 | Live | first deploy (latches GitHub source), capture one real plan for the sample (user-billed, cents), live smoke, red-team set once | ⬜ |
 | 11 | Docs | README (what, how to connect an agent, billing, guardrails, limits), decision log final | ⬜ |
 
 ## Plan changes (newest first)
+
+- **Phases 8–9:** app registered as `conductor` (`app_01M8832W6C974BDDJ39RHF79Q4`) because builds and
+  `dev start` need a real app id; registering is free and does not deploy or latch the source.
+  The local board can't use the planner without billing and the sample isn't captured yet, so a
+  **dev-only fixture** (`devSeedFixture`, refused unless `ALLOW_DEBUG_ROUTES=true`, which only
+  `deepspace dev/test` set) loads a labeled fixed plan. Test accounts: Alice and Bob (unique emails —
+  test-account emails are global across developers), Eve (`eve@deepspace.test`). Raised
+  `TEAMS_PER_USER_PER_DAY` 5 → 20 after repeated test runs hit it. Screenshots:
+  `SCREENSHOT_DIR=<dir> npx deepspace test run e2e --grep screens`.
 
 - **Phase 7:** confirmation is enforced with a server-side stored proposal (`assistant_proposals`,
   one per user, 5-minute expiry): the first `send_directive` call only stores a proposal; it runs
