@@ -68,13 +68,11 @@ export class AppCronRoom extends CronRoom<Env> {
 /** Runs durable background work defined in src/jobs.ts. */
 export class AppJobRoom extends JobRoom<Env> {
   constructor(state: DurableObjectState, env: Env) {
-    super(state, env, {
-      authorizeWrite: async (user) => {
-        if (user.userId.startsWith('anon-')) return false
-        const role = await resolveAppRole(env, user.userId)
-        return role === 'member' || role === 'admin'
-      },
-    })
+    // Only server code enqueues jobs (src/actions/index.ts). Clients may not
+    // enqueue, cancel or watch the queue: job rows carry other teams' ids.
+    const adminOnly = async (user: { userId: string }) =>
+      !user.userId.startsWith('anon-') && (await resolveAppRole(env, user.userId)) === 'admin'
+    super(state, env, { authorizeWrite: adminOnly, authorizeRead: adminOnly })
   }
 
   protected async onJob(job: Job, context: JobContext): Promise<unknown> {

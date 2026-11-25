@@ -11,20 +11,12 @@ import { jsonSchema, tool } from 'ai'
 import type { ToolSet } from 'ai'
 import { z } from 'zod/v4'
 import { BUILT_IN_TOOLS, applyAiToolDefaults } from 'deepspace/worker'
-import type { ToolSchema, CollectionSchema } from 'deepspace/worker'
+import type { ToolSchema, CollectionSchema, AgentToolContext } from 'deepspace/worker'
+import type { Env } from '../../worker'
+import { buildAgentTools } from './agent-tools'
 
 type ToolExecutor = (toolName: string, params: Record<string, unknown>) => Promise<unknown>
 
-const ALLOWED_TOOL_NAMES = [
-  'schema.list',
-  'schema.describe',
-  'records.query',
-  'records.get',
-  'records.create',
-  'records.update',
-  'records.delete',
-  'user.current',
-]
 
 // ============================================================================
 // System prompt
@@ -77,23 +69,29 @@ export function buildSystemPrompt(appName: string, schemas: CollectionSchema[]):
 // Tool definitions
 // ============================================================================
 
-export function buildTools(executor: ToolExecutor): ToolSet {
-  const tools: ToolSet = {}
+/**
+ * Tools for local coding agents (CLI / MCP). These are Conductor's own agent
+ * tools only — no raw record tools — so an agent can't write around ops.ts.
+ * The in-app assistant gets its own, separate tool set (src/ai/assistant.ts).
+ */
+export function buildTools(_executor: ToolExecutor, context?: AgentToolContext<Env>): ToolSet {
+  if (!context) return {}
+  return buildAgentTools(context)
+}
 
+/** Raw record tools (kept for reference by the assistant's read-only lookups). */
+export function buildRecordTools(executor: ToolExecutor, allowed: readonly string[]): ToolSet {
+  const tools: ToolSet = {}
   for (const def of BUILT_IN_TOOLS) {
-    if (!ALLOWED_TOOL_NAMES.includes(def.name)) continue
+    if (!allowed.includes(def.name)) continue
     const safeName = def.name.replace('.', '_')
     tools[safeName] = tool({
       description: def.description,
       inputSchema: buildInputSchema(def),
-      // Apply assistant-only param defaults (e.g. records.query page size) here
-      // in the AI tool layer, so internal record readers that hit the tools
-      // dispatch directly stay unbounded.
       execute: async (params: Record<string, unknown>) =>
         executor(def.name, applyAiToolDefaults(def.name, params)),
     })
   }
-
   return tools
 }
 

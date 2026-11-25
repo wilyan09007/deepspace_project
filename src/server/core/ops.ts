@@ -450,6 +450,31 @@ export class Ops {
     return { projectId, existed: false }
   }
 
+  /** Every project in every team the caller belongs to. */
+  async myProjects(): Promise<Array<{ teamId: string; teamName: string; projectId: string; repo: string; kind: Project['kind'] }>> {
+    const out = []
+    const memberships = (await this.store.query<Member>('team_members', { userId: this.userId })).filter((m) => m.data.status !== 'removed')
+    for (const m of memberships) {
+      const team = await this.store.get<Team>('teams', m.data.teamId)
+      for (const p of await this.store.query<Project>('projects', { teamId: m.data.teamId })) {
+        out.push({ teamId: m.data.teamId, teamName: team?.data.name ?? '', projectId: p.recordId, repo: `${p.data.repoOwner}/${p.data.repoName}`, kind: p.data.kind })
+      }
+    }
+    return out
+  }
+
+  /** A project id, or "owner/repo" when it names exactly one of the caller's projects. */
+  async resolveProject(ref: unknown): Promise<string> {
+    const value = clip(ref, 300)
+    if (!value) throw new OpsError('invalid_input', 'project is required (a project id or owner/repo)')
+    const repo = parseRepoRef(value)
+    if (!repo) return value
+    const matches = (await this.myProjects()).filter((p) => p.repo.toLowerCase() === `${repo.owner}/${repo.repo}`.toLowerCase())
+    if (matches.length === 1) return matches[0]!.projectId
+    if (!matches.length) throw new OpsError('not_found', `None of your teams has a project for ${value}. Add it on the Conductor board first.`, 404)
+    throw new OpsError('ambiguous', `${value} is a project in several of your teams; pass the project id instead (see list_projects).`, 409)
+  }
+
   // ── Goals ───────────────────────────────────────────────────────────────
 
   async createGoal(projectId: string, title: unknown, body: unknown): Promise<{ goalId: string; project: Row<Project> }> {

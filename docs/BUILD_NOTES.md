@@ -27,10 +27,10 @@ Status: ✅ done · 🔨 in progress · ⬜ not started · ⚠️ changed (see P
 |---|-------|-----------|--------|
 | 1 | Schemas + permissions | `lintSchemas` passes; every Conductor collection is team-read-only, server-write | ✅ |
 | 2 | Engine (pure) | ranking, overlap, import parsing, plan validation unit-tested | ✅ 16 tests |
-| 3 | Server core: `store.ts`, `integration.ts`, `config.ts`, `ops.ts` | every op checks membership; unit tests with an in-memory fake store cover claim races, directives, overlaps, cross-team refusal | 🔨 |
-| 4 | Planner (`planner.ts`) | tree+readme → Claude (user JWT) → `validatePlan` → import edges from ≤12 files → tasks written; stages written to `goal.planStage`; failure sets `planError`; unit-tested with stubbed AI/GitHub | ⬜ |
-| 5 | Wiring: export `createActionTools`; server actions; agent tools (`buildTools`); JobRoom locked to admins | type-check passes; each action/tool is a thin wrapper over ops | ⬜ |
-| 6 | Demo job + cron (stale sweep, daily digest) | demo script drives 3 agents through ops incl. 1 overlap, 1 question, obeys directives; digest is AI-free; email capped | ⬜ |
+| 3 | Server core: `store.ts`, `integration.ts`, `config.ts`, `ops.ts` | every op checks membership; unit tests with an in-memory fake store cover claim races, directives, overlaps, cross-team refusal | ✅ 19 tests (+4 GitHub parser) |
+| 4 | Planner (`planner.ts`) | tree+readme → Claude (user JWT) → `validatePlan` → import edges from ≤12 files → tasks written; stages written to `goal.planStage`; failure sets `planError`; unit-tested with stubbed AI/GitHub | ✅ 7 tests |
+| 5 | Wiring: export `createActionTools`; server actions; agent tools (`buildTools`); JobRoom locked to admins | type-check passes; each action/tool is a thin wrapper over ops | ✅ (live-verified in phase 9/10) |
+| 6 | Demo job + cron (stale sweep, daily digest) | demo script drives 3 agents through ops incl. 1 overlap, 1 question, obeys directives; digest is AI-free; email capped | ✅ 6 tests |
 | 7 | Assistant (ai-chat feature + guardrails) | separate assistant tool set; guard classifier; server-enforced confirmation; red-team prompts file; guard parsing unit-tested | ⬜ |
 | 8 | UI | landing, teams, join, team page, board (goals, tasks, agents, overlaps, questions, activity, directives), connect page, assistant drawer, own theme | ⬜ |
 | 9 | Local run | `deepspace dev start` boots; core loop clicked through in a browser with Playwright (no billed calls: sample plan + demo) | ⬜ |
@@ -38,6 +38,13 @@ Status: ✅ done · 🔨 in progress · ⬜ not started · ⚠️ changed (see P
 | 11 | Docs | README (what, how to connect an agent, billing, guardrails, limits), decision log final | ⬜ |
 
 ## Plan changes (newest first)
+
+- **Phases 3–6 notes:** tests found and fixed two real bugs — the agent that loses a claim race was
+  told tasks were "waiting on dependencies" (stale snapshot), and a reassigned agent's next check-in
+  said "no task" instead of "your task was reassigned". `createActionTools` moved to
+  `src/server/action-tools.ts` so actions, tools, jobs and cron share it without import cycles.
+  Agent tools accept `owner/repo` as the project (resolved against the caller's teams) plus a
+  `list_projects` tool. Sample plan slot is `src/server/core/sample-plan.ts` (null until phase 10).
 
 - **2026-11-25 (session 2):** owner chose users-pay-for-everything. Consequences: digest is AI-free;
   digest emails are the single owner-paid item (opt-in, cap 3/day); the hourly owner-paid PR refresh is
