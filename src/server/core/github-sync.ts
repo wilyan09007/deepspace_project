@@ -320,16 +320,23 @@ export async function setupWebhook(ops: Ops, projectId: string, gh: GitHubWriter
     ;[row] = await ops.store.query<WebhookRow>('github_webhooks', { projectId })
     if (!row) throw new OpsError('webhook_failed', 'Could not prepare the webhook. Try again.', 500)
   }
+  // The stored secret may have been shown to a member during a manual setup, so the webhook Squadboard
+  // adds gets a fresh one nobody has seen (saved first, so GitHub's first ping already verifies).
+  const shown = row.data.secret
+  const secret = randomSecret()
+  await ops.store.update<WebhookRow>('github_webhooks', row.recordId, { secret })
   try {
-    const { id } = await gh.createWebhook(owner, repo, { url, secret: row.data.secret, events: ['issues', 'pull_request'] })
+    const { id } = await gh.createWebhook(owner, repo, { url, secret, events: ['issues', 'pull_request'] })
     await ops.store.update<WebhookRow>('github_webhooks', row.recordId, { hookId: id })
     await ops.store.update<Project>('projects', projectId, { ghWebhook: 'auto' })
     await ops.log({ teamId, projectId, kind: 'github', message: `turned on live GitHub updates for ${owner}/${repo}` })
     return { mode: 'auto', url }
   } catch (e) {
+    // Not added: keep the earlier secret, so an admin already entering it by hand isn't broken.
+    await ops.store.update<WebhookRow>('github_webhooks', row.recordId, { secret: shown })
     if (e instanceof GithubNotConnected) notConnected(e)
     await ops.store.update<Project>('projects', projectId, { ghWebhook: 'manual' })
-    return { mode: 'manual', url, secret: row.data.secret, reason: `Squadboard couldn't add the webhook as you: GitHub only lets admins of ${owner}/${repo} do that.` }
+    return { mode: 'manual', url, secret: shown, reason: `Squadboard couldn't add the webhook as you: GitHub only lets admins of ${owner}/${repo} do that.` }
   }
 }
 

@@ -303,6 +303,21 @@ describe('webhooks', () => {
     expect(await deliver(projectId, 'ping', { zen: 'hi' }, seen.secret)).toMatchObject({ status: 401 })
   })
 
+  it('an automatic setup never reuses a secret that was shown to someone', async () => {
+    const { teamId, projectId } = await seed()
+    gh.hookFails = true
+    const seen = await setupWebhook(ops('bob'), projectId, gh, APP)
+    if (seen.mode !== 'manual') throw new Error('expected manual setup')
+    // Then an admin turns it on: GitHub gets a fresh secret Bob never saw.
+    gh.hookFails = false
+    expect((await setupWebhook(ops('alice'), projectId, gh, APP)).mode).toBe('auto')
+    expect(gh.hooks[0]!.secret).toBe(secretOf(projectId))
+    expect(secretOf(projectId)).not.toBe(seen.secret)
+    await ops('alice').removeMember(teamId, 'bob')
+    expect(await deliver(projectId, 'ping', { zen: 'hi' }, seen.secret)).toMatchObject({ status: 401 })
+    expect(await deliver(projectId, 'ping', { zen: 'hi' })).toMatchObject({ status: 200 })
+  })
+
   it('a signed "issue closed" event finishes its task at once', async () => {
     const { projectId, taskIds } = await seed()
     await setMirroring(ops('alice'), projectId, gh, true, APP)
