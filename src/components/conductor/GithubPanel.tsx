@@ -115,6 +115,9 @@ export function GithubPanel({ project, tasks, run, pending, onOpenTask }: { proj
               <RefreshCw className={cn(pending === 'syncGithub' && 'animate-spin')} /> Sync now
             </Button>
           </div>
+          <button type="button" onClick={connect} className="text-[11px] text-muted-foreground hover:text-foreground hover:underline">
+            Reconnect GitHub (change which repositories Conductor can use)
+          </button>
           {project.data.ghSyncError && <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs">{project.data.ghSyncError}</p>}
         </>
       )}

@@ -488,7 +488,8 @@ export class Ops {
       }
       throw e
     }
-    if (info.isPrivate) throw new OpsError('repo_private', 'Only public repositories are supported')
+    // A private repo only gets here when it was read through the caller's own GitHub
+    // connection (decision #20), so they have access to it.
     const [owner, name] = info.fullName.includes('/') ? info.fullName.split('/') : [ref.owner, ref.repo]
     const projectId = await this.store.create<Project>('projects', {
       teamId,

@@ -99,7 +99,13 @@ export default function TeamPage() {
             </form>
             <p className="mt-2 text-xs text-muted-foreground" data-testid="repo-access-note">
               {github ? (
-                'Your GitHub account is connected, so private repositories you can access work too. Checking the repo uses a tiny amount of your DeepSpace credits.'
+                <>
+                  Your GitHub account is connected, so private repositories you can access work too.{' '}
+                  <button type="button" className="text-primary hover:underline" onClick={connectGithub} data-testid="team-reconnect-github">
+                    Reconnect GitHub
+                  </button>{' '}
+                  to change which repositories Conductor can use. Checking the repo uses a tiny amount of your DeepSpace credits.
+                </>
               ) : (
                 <>
                   Public repositories, or{' '}

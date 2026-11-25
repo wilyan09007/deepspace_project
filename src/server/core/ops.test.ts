@@ -105,12 +105,13 @@ describe('projects', () => {
     expect(await alice.createProject(teamId, 'ACME/WEB')).toEqual({ projectId: first.projectId, existed: true })
   })
 
-  it('reports missing or private repos clearly', async () => {
+  it('reports missing repos clearly and accepts private ones the caller can read', async () => {
     const { teamId } = await ops('alice').createTeam('Core')
     const missing = ops('alice', github({ getRepository: async () => { throw Object.assign(new Error('nf'), { status: 404 }) } }))
     await expectCode(missing.createProject(teamId, 'acme/nope'), 'repo_not_found')
+    // A private repo that was readable (through the caller's own GitHub connection) is accepted.
     const priv = ops('alice', github({ getRepository: async () => ({ fullName: 'a/b', defaultBranch: 'main', description: '', isPrivate: true }) }))
-    await expectCode(priv.createProject(teamId, 'a/b'), 'repo_private')
+    expect((await priv.createProject(teamId, 'a/b')).existed).toBe(false)
     await expectCode(ops('alice', github()).createProject(teamId, 'not a repo'), 'invalid_repo')
   })
 })
