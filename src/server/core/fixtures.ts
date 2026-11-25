@@ -8,6 +8,20 @@
 import { type Goal, type Ops, type Project } from './ops'
 import { savePlan } from './planner'
 
+/** An empty repo-type project (no goals) for exercising New goal in the browser. */
+export async function seedDevRepoProject(ops: Ops, teamId: string): Promise<{ projectId: string }> {
+  await ops.requireMember(teamId)
+  const projectId = await ops.store.create<Project>('projects', {
+    teamId,
+    repoOwner: 'conductor-fixtures',
+    repoName: 'plan-me',
+    defaultBranch: 'main',
+    description: 'Dev-only test fixture (not a real repository).',
+    kind: 'repo',
+  })
+  return { projectId }
+}
+
 export async function seedDevFixture(ops: Ops, teamId: string): Promise<{ projectId: string; goalId: string }> {
   await ops.requireMember(teamId)
   const projectId = await ops.store.create<Project>('projects', {

@@ -14,7 +14,7 @@ import { prepareDemo, requestStopDemo } from '../server/core/demo'
 import { githubClient } from '../server/core/github'
 import { resetGoalForRetry, runPlanner, type PlannerDeps } from '../server/core/planner'
 import { makeOps, userModel } from '../server/core/runtime'
-import { seedDevFixture } from '../server/core/fixtures'
+import { seedDevFixture, seedDevRepoProject } from '../server/core/fixtures'
 import { exportPlan, loadSample, sampleAvailable } from '../server/core/sample'
 import { emailDigestToSelf, generateTodaysDigest } from '../server/core/digest'
 import { callIntegration, isCreditError, NO_CREDITS_MESSAGE } from '../server/core/integration'
@@ -142,6 +142,8 @@ export const actions: Record<string, ActionHandler<Env>> = {
   /** Dev/test only: a fixed plan for exercising the board without billing. Refused in production. */
   devSeedFixture: action(async ({ env, userId, callerJwt, params }) => {
     if (env.ALLOW_DEBUG_ROUTES !== 'true') throw new OpsError('not_found', 'Not available', 404)
-    return seedDevFixture(makeOps(env, userId, undefined, callerJwt), str(params.teamId))
+    const ops = makeOps(env, userId, undefined, callerJwt)
+    if (params.kind === 'repo') return seedDevRepoProject(ops, str(params.teamId))
+    return seedDevFixture(ops, str(params.teamId))
   }),
 }

@@ -116,6 +116,20 @@ export default function TeamPage() {
                 Load test fixture (dev only)
               </Button>
             )}
+            {import.meta.env.DEV && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="mt-3"
+                data-testid="dev-repo-fixture"
+                onClick={async () => {
+                  const res = await run<{ projectId: string }>('devSeedFixture', { teamId, kind: 'repo' })
+                  if (res) navigate(`/t/${teamId}/p/${res.projectId}`)
+                }}
+              >
+                Empty repo project (dev only)
+              </Button>
+            )}
           </Panel>
 
           <Panel

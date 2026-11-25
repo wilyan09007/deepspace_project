@@ -119,3 +119,31 @@ test("digest: generated on demand for free; emailing it bills the clicker, not t
   await panel.getByRole('button', { name: 'Email me' }).click()
   await expect(alice!.page.getByText(/out of credits/)).toBeVisible({ timeout: 20_000 })
 })
+
+test('new goal: the button opens the dialog, planning starts, and its outcome shows on the board', async ({ users }) => {
+  // Runs locally only: it needs the dev fixture's empty repo project.
+  test.skip(!!process.env.LIVE_URL, 'Local only')
+  const [alice] = await users(['Alice'])
+  await createTeam(alice!, `Goal ${Date.now().toString(36)}`)
+  await alice!.page.getByTestId('dev-repo-fixture').click()
+  await expect(alice!.page).toHaveURL(/\/p\/[^/]+$/, { timeout: 20_000 })
+  const page = alice!.page
+
+  await expect(page.getByText('No goals yet')).toBeVisible()
+  await page.getByTestId('new-goal').click()
+  const dialog = page.getByRole('dialog', { name: 'New goal' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Plan it' })).toBeDisabled()
+  await dialog.getByLabel('Goal').fill('Add a dark mode toggle')
+  await dialog.getByLabel('Details (optional)').fill('Persist the choice.')
+  await dialog.getByRole('button', { name: 'Plan it' }).click()
+
+  // The goal appears at once with its live planning status…
+  await expect(page.getByRole('tab', { name: /Add a dark mode toggle/ })).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByTestId('goal-header')).toContainText('Add a dark mode toggle')
+  // …and the planner really ran: test accounts have no credits, so it stops at the first paid GitHub read
+  // and the board says so, with a Retry button.
+  await expect(page.getByTestId('goal-header')).toContainText(/out of credits/, { timeout: 30_000 })
+  await expect(page.getByTestId('goal-header').getByRole('button', { name: 'Retry' })).toBeVisible()
+  await expect(page.getByTestId('activity-feed')).toContainText('set a goal: Add a dark mode toggle')
+})
