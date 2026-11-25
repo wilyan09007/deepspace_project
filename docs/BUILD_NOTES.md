@@ -56,10 +56,13 @@ Status: ✅ done · 🔨 in progress · ⬜ not started · ⚠️ changed (see P
   a nonexistent "report overlap" tool when asked how to connect → its prompt now carries the exact
   how-to facts. Owner's live data: team "Conductor sample", project RealWorld React app, agent
   `cli-check` (task released, planted red-team question answered).
-- **Still to confirm live:** the connect-question reply after the prompt fix (the run hit the
-  assistant's own 20/hour limit); the stale sweep marking `cli-check` offline (~15 min after
-  01:14 UTC); the first daily digest at 22:00 UTC.
-
+- **Live checks, 01:50–01:56 UTC:** scheduler verified through the owner's `/ws/cron` history: `stale-sweep`
+  succeeds every 5 min; `daily-digest` triggered via `cron.trigger` ran OK in 472 ms. CronRoom output
+  does **not** appear in `deepspace logs`, so check runs with the history (see
+  `scratchpad`-style `cron-peek` over `wss://…/ws/cron/app:<appId>?token=…`), not logs. A real
+  digest email was sent to the owner via `emailDigest` (user-billed, $0.01). Credits now 430/500.
+- **Still to confirm:** owner sees the digest email arrive; the assistant's corrected "how do I
+  connect" answer and `cli-check` shown offline (hourly assistant limit resets 02:00 UTC).
 - **Phases 8–9:** app registered as `conductor` (`app_01M8832W6C974BDDJ39RHF79Q4`) because builds and
   `dev start` need a real app id; registering is free and does not deploy or latch the source.
   The local board can't use the planner without billing and the sample isn't captured yet, so a
