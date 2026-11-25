@@ -126,7 +126,7 @@ Decisions and the build plan: [`docs/DECISIONS.md`](docs/DECISIONS.md),
 ```bash
 npm install                     # npm 11.6+ required
 npx deepspace dev start         # local app at http://localhost:5173
-npx vitest run                  # 73 unit tests (engine, ops, planner, demo, digest, assistant, parsers)
+npx vitest run                  # 83 unit tests (engine, ops, planner, demo, digest, assistant, parsers, timing)
 npx deepspace test run all      # unit + browser tests against a local server
 LIVE_URL=https://conductor.app.space npx playwright test -c tests/live.config.ts   # browser tests against the live app
 node scripts/redteam.mjs        # red-team the live assistant (billed to you; run `npx deepspace auth whoami` first)
@@ -136,6 +136,8 @@ npx deepspace deploy
 Browser tests need test accounts selectable as **Alice**, **Bob** and **Eve**
 (`npx deepspace test accounts create --email <unique>@deepspace.test --name Alice --password-stdin`).
 Locally they use a dev-only fixture plan (refused in production) so no credits are spent.
+
+Step-by-step commands for testing everything, including the live site and scheduled tasks: [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Limits
 
