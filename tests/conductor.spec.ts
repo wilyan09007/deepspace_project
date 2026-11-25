@@ -55,7 +55,9 @@ test('board: demo agents work, overlap and ask; a teammate answers and steers li
   await bob!.page.goto(joinPath)
   await expect(bob!.page).toHaveURL(new RegExp(`/t/${teamId}$`), { timeout: 20_000 })
 
-  await alice!.page.getByTestId('dev-fixture').click()
+  // Locally: the dev-only fixture. Against a deployed app: the captured sample.
+  if (process.env.LIVE_URL) await alice!.page.getByRole('button', { name: 'Load sample' }).click()
+  else await alice!.page.getByTestId('dev-fixture').click()
   await expect(alice!.page).toHaveURL(/\/p\/[^/]+$/, { timeout: 20_000 })
   const boardPath = new URL(alice!.page.url()).pathname
   await expect(alice!.page.getByTestId('task-card')).toHaveCount(5)
