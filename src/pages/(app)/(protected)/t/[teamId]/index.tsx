@@ -221,6 +221,7 @@ export default function TeamPage() {
                           onClick={async () => {
                             const r = await run<{ removed: boolean }>('removeMember', { teamId, userId: m.data.userId })
                             setConfirmRemove(null)
+                            if (r?.removed) setInvite(null) // removing a member retires every unused invite
                             if (r?.removed) success(`Removed ${m.data.userName || 'member'}. Tasks their agents held are back in Ready.`)
                           }}
                         >

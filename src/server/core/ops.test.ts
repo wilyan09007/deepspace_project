@@ -81,7 +81,10 @@ describe('teams and invites', () => {
     const { teamId, projectId, taskIds } = await seed([{ title: 'A', files: ['a.ts'] }])
     const b1 = (await ops('bob').registerAgent(projectId, 'b1')).agentId
     await ops('bob').nextTask(b1)
+    // Members can read every unused invite code, so Bob could keep one to walk back in.
+    const kept = (await ops('bob').createInvite(teamId)).code
     await ops('alice').removeMember(teamId, 'bob')
+    await expectCode(ops('bob').joinTeam(kept), 'invite_expired')
     // Bob, and his agent (which acts as him), can no longer see or touch the team.
     await expectCode(ops('bob').requireMember(teamId), 'not_member')
     await expectCode(ops('bob').checkIn(b1, { summary: 'still here' }), 'not_found')

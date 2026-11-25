@@ -478,6 +478,13 @@ export class Ops {
     const member = (await this.store.query<Member>('team_members', { teamId, userId })).find((m) => m.data.status !== 'removed')
     if (!member) throw new OpsError('not_found', 'Member not found', 404)
     await this.store.update<Member>('team_members', member.recordId, { status: 'removed' })
+    // Every member can read the team's unused invite codes, so the removed one could have kept one
+    // to walk back in: retire them all (the owner makes new ones).
+    for (const invite of await this.store.query<Invite>('team_invites', { teamId })) {
+      if (!invite.data.usedBy && invite.data.expiresAt >= this.now()) {
+        await this.store.update<Invite>('team_invites', invite.recordId, { expiresAt: this.now() - 1 })
+      }
+    }
 
     const projects = new Set<string>()
     for (const agent of await this.store.query<Agent>('agents', { teamId, ownerUserId: userId })) {
