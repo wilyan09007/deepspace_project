@@ -61,8 +61,9 @@ Status: ✅ done · 🔨 in progress · ⬜ not started · ⚠️ changed (see P
   does **not** appear in `deepspace logs`, so check runs with the history (see
   `scratchpad`-style `cron-peek` over `wss://…/ws/cron/app:<appId>?token=…`), not logs. A real
   digest email was sent to the owner via `emailDigest` (user-billed, $0.01). Credits now 430/500.
-- **Still to confirm:** owner sees the digest email arrive; the assistant's corrected "how do I
-  connect" answer and `cli-check` shown offline (hourly assistant limit resets 02:00 UTC).
+- **Final live checks, 6:00 PM Pacific 2026-11-24:** the assistant now gives accurate connect steps
+  (real tool list, points to the Connect page) and reports `cli-check` **offline**, so the stale
+  sweep works live. Owner to confirm the digest email arrived. Nothing else outstanding.
 - **Phases 8–9:** app registered as `conductor` (`app_01M8832W6C974BDDJ39RHF79Q4`) because builds and
   `dev start` need a real app id; registering is free and does not deploy or latch the source.
   The local board can't use the planner without billing and the sample isn't captured yet, so a
