@@ -55,7 +55,7 @@ Against a local copy of the app (starts it for you, about 2 minutes):
 npx deepspace test run all
 ```
 
-Against the live site (about 1 minute):
+Against the live site (about 1 minute). Each run creates up to 4 teams as Alice, and the live site allows 20 new teams per person per day, so run it at most about 5 times a day (the count resets at 4 PM Pacific):
 ```bash
 LIVE_URL=https://conductor.app.space npx playwright test -c tests/live.config.ts
 ```
