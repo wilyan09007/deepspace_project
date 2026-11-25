@@ -83,6 +83,8 @@ export const conductorSchemas: CollectionSchema[] = [
       select('role', ['owner', 'member']),
       text('userName'),
       text('userImage'),
+      // 1 = this member wants the daily digest by email (decision #16).
+      num('digestOptIn'),
     ],
     teamField: 'teamId',
     uniqueOn: ['teamId', 'userId'],
@@ -104,6 +106,8 @@ export const conductorSchemas: CollectionSchema[] = [
       text('defaultBranch'),
       text('description'),
       select('kind', ['repo', 'sample']),
+      // Last user-triggered PR status refresh (decision #17 throttle).
+      num('prCheckedAt'),
     ],
     teamField: 'teamId',
     permissions: TEAM_READ_ONLY,
@@ -122,6 +126,9 @@ export const conductorSchemas: CollectionSchema[] = [
       json('importEdges'),
       text('createdByName'),
       select('source', ['planner', 'sample']),
+      // Demo run state: 'running' | 'stopping' | 'stopped' | '' (never run).
+      text('demoState'),
+      text('planSummary'),
     ],
     teamField: 'teamId',
     permissions: TEAM_READ_ONLY,
