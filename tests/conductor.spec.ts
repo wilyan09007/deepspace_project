@@ -216,3 +216,43 @@ test('github panel: offered on repo projects (connect first), not on samples', a
   await expect(alice!.page.getByTestId('task-card')).toHaveCount(5, { timeout: 20_000 })
   await expect(alice!.page.getByTestId('github-section')).toHaveCount(0)
 })
+
+test('instant feedback: clicks show their result before the server answers, and undo if it fails', async ({ users }) => {
+  test.skip(!!process.env.LIVE_URL, 'Local only (uses the dev fixture)')
+  test.setTimeout(180_000)
+  const [alice] = await users(['Alice'])
+  await createTeam(alice!, `Instant ${Date.now().toString(36)}`)
+  const page = alice!.page
+  await page.getByTestId('dev-fixture').click()
+  await expect(page.getByTestId('task-card')).toHaveCount(5, { timeout: 20_000 })
+
+  // Slow the server down by 3 s for these actions; the screen must change well before that.
+  const slow = async (route: import('@playwright/test').Route) => {
+    await new Promise((r) => setTimeout(r, 3000))
+    await route.continue()
+  }
+  await page.route('**/api/actions/startDemo', slow)
+  await page.getByTestId('start-demo').click()
+  await expect(page.getByTestId('stop-demo')).toBeVisible({ timeout: 1000 })
+
+  const working = page.getByTestId('agent-row').filter({ hasText: 'Working' }).first()
+  await expect(working).toBeVisible({ timeout: 60_000 })
+  const name = (await working.locator('span[title]').first().innerText()).trim()
+  const row = page.getByTestId('agent-row').filter({ hasText: name })
+
+  await page.route('**/api/actions/sendDirective', slow)
+  await row.getByRole('button', { name: 'Pause' }).click()
+  await expect(row).toContainText('Paused', { timeout: 1000 })
+  await expect(row).toContainText('Paused', { timeout: 10_000 }) // and it stays paused once the server confirms
+  await page.unroute('**/api/actions/sendDirective')
+
+  // A failing action snaps back and says why.
+  await page.route('**/api/actions/sendDirective', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: false, error: 'Simulated failure', code: 'test' }) }),
+  )
+  await row.getByRole('button', { name: 'Resume' }).click()
+  await expect(page.getByText('Simulated failure')).toBeVisible({ timeout: 5000 })
+  await expect(row).toContainText('Paused')
+  await page.unroute('**/api/actions/sendDirective')
+  await page.getByTestId('stop-demo').click()
+})

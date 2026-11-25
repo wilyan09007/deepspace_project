@@ -10,7 +10,8 @@
 
 import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { AuthOverlay, useAuthProfileReady, signOut, useQuery } from 'deepspace'
+import { AuthOverlay, useAuthProfileReady, signOut } from 'deepspace'
+import { useLiveQuery } from '../lib/optimistic'
 import { ChevronDown, LogOut, Menu, X } from 'lucide-react'
 import { APP_NAME } from '../constants'
 import type { Role } from '../constants'
@@ -173,8 +174,8 @@ export default function Navigation() {
 
 /** Reviews + open agent questions across the viewer's teams (team permissions scope the queries). */
 function InboxCount() {
-  const { records: reviews } = useQuery('tasks', { where: { status: 'review' } })
-  const { records: questions } = useQuery('questions', { where: { status: 'open' } })
+  const reviews = useLiveQuery<{ status: string }>('tasks', { where: { status: 'review' } }).records.filter((t) => t.data.status === 'review')
+  const questions = useLiveQuery<{ status: string }>('questions', { where: { status: 'open' } }).records.filter((q) => q.data.status === 'open')
   const n = reviews.length + questions.length
   if (!n) return null
   return (

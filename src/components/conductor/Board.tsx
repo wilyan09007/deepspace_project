@@ -8,6 +8,8 @@ import { useQuery } from 'deepspace'
 import { AlertTriangle, Check, CheckCheck, CircleDot, ExternalLink, GitPullRequest, MessageSquareText, Pause, Play, Send, Undo2 } from 'lucide-react'
 import { Button, ConfirmModal, Input, Modal, Textarea } from '@/components/ui'
 import { cn } from '@/lib/utils'
+import { expected } from '@/lib/expected'
+import type { Patch } from '@/lib/optimistic'
 import { AgentChip, Mono } from './Page'
 import {
   AGENT_STATUS,
@@ -23,6 +25,7 @@ import {
 
 type Rec<T> = { recordId: string; data: T; createdAt: string; updatedAt: string }
 type Run = <T>(name: string, params?: Record<string, unknown>) => Promise<T | null>
+type Act = <T>(name: string, params: Record<string, unknown>, expected: Patch[]) => Promise<T | null>
 
 export function StatusText({ status }: { status: string }) {
   const meta = TASK_STATUS[status] ?? { label: status, tone: 'text-muted-foreground' }
@@ -115,7 +118,7 @@ export function TaskCard({
 
 const HISTORY_TONE: Record<string, string> = { review: 'text-st-review', complete: 'text-st-done', directive: 'text-st-paused', github: 'text-primary', assign: 'text-st-working' }
 
-export function TaskDetail({ task, agent, deps, run, onClose }: { task: Rec<Task> | null; agent?: Rec<Agent>; deps: Array<Rec<Task>>; run: Run; onClose: () => void }) {
+export function TaskDetail({ task, agent, deps, act, onClose }: { task: Rec<Task> | null; agent?: Rec<Agent>; deps: Array<Rec<Task>>; act: Act; onClose: () => void }) {
   const { records: history } = useQuery<EventRow>('events', { where: { taskId: task?.recordId ?? '__none__' }, orderBy: 'at', orderDir: 'desc', limit: 30 })
   const [changes, setChanges] = useState('')
   const [asking, setAsking] = useState(false)
@@ -155,13 +158,12 @@ export function TaskDetail({ task, agent, deps, run, onClose }: { task: Rec<Task
             {asking ? (
               <form
                 className="mt-2 space-y-2"
-                onSubmit={async (e) => {
+                onSubmit={(e) => {
                   e.preventDefault()
-                  if (await run('requestChanges', { taskId: task.recordId, note: changes })) {
-                    setChanges('')
-                    setAsking(false)
-                    onClose()
-                  }
+                  void act('requestChanges', { taskId: task.recordId, note: changes }, expected.requestChanges(task.recordId, changes))
+                  setChanges('')
+                  setAsking(false)
+                  onClose()
                 }}
               >
                 <Textarea value={changes} onChange={(e) => setChanges(e.target.value)} rows={2} maxLength={1000} placeholder="What should change?" autoFocus aria-label="What should change?" />
@@ -172,7 +174,7 @@ export function TaskDetail({ task, agent, deps, run, onClose }: { task: Rec<Task
               </form>
             ) : (
               <div className="mt-2 flex gap-2">
-                <Button size="sm" onClick={async () => (await run('approveTask', { taskId: task.recordId })) && onClose()}>
+                <Button size="sm" onClick={() => { void act('approveTask', { taskId: task.recordId }, expected.approve(task.recordId)); onClose() }}>
                   <Check /> Approve
                 </Button>
                 <Button size="sm" variant="secondary" onClick={() => setAsking(true)}>
@@ -237,7 +239,7 @@ export function TaskDetail({ task, agent, deps, run, onClose }: { task: Rec<Task
   )
 }
 
-export function AgentsPanel({ agents, tasks, run, pending }: { agents: Array<Rec<Agent>>; tasks: Array<Rec<Task>>; run: Run; pending: string | null }) {
+export function AgentsPanel({ agents, tasks, run, act }: { agents: Array<Rec<Agent>>; tasks: Array<Rec<Task>>; run: Run; act: Act }) {
   const [noteFor, setNoteFor] = useState<string | null>(null)
   const [note, setNote] = useState('')
   const [reassign, setReassign] = useState<Rec<Agent> | null>(null)
@@ -246,9 +248,13 @@ export function AgentsPanel({ agents, tasks, run, pending }: { agents: Array<Rec
 
   async function sendNote(e: FormEvent, agentId: string) {
     e.preventDefault()
-    if (await run('sendDirective', { agentId, kind: 'note', text: note })) {
-      setNote('')
-      setNoteFor(null)
+    const text = note
+    setNote('')
+    setNoteFor(null)
+    if (!(await run('sendDirective', { agentId, kind: 'note', text }))) {
+      // Put the text back so nothing typed is lost.
+      setNote(text)
+      setNoteFor(agentId)
     }
   }
 
@@ -279,16 +285,16 @@ export function AgentsPanel({ agents, tasks, run, pending }: { agents: Array<Rec
               {a.data.lastSummary && <p className="mt-1 line-clamp-2 text-xs">{a.data.lastSummary}</p>}
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {a.data.status === 'paused' ? (
-                  <Button size="sm" variant="secondary" onClick={() => run('sendDirective', { agentId: a.recordId, kind: 'resume' })} disabled={!!pending}>
+                  <Button size="sm" variant="secondary" onClick={() => act('sendDirective', { agentId: a.recordId, kind: 'resume' }, expected.resume(a, task))}>
                     <Play /> Resume
                   </Button>
                 ) : (
-                  <Button size="sm" variant="secondary" onClick={() => run('sendDirective', { agentId: a.recordId, kind: 'pause' })} disabled={!!pending || a.data.status === 'offline'}>
+                  <Button size="sm" variant="secondary" onClick={() => act('sendDirective', { agentId: a.recordId, kind: 'pause' }, expected.pause(a, task))} disabled={a.data.status === 'offline'}>
                     <Pause /> Pause
                   </Button>
                 )}
                 {task && (
-                  <Button size="sm" variant="ghost" onClick={() => setReassign(a)} disabled={!!pending}>
+                  <Button size="sm" variant="ghost" onClick={() => setReassign(a)}>
                     <Undo2 /> Take task back
                   </Button>
                 )}
@@ -312,7 +318,8 @@ export function AgentsPanel({ agents, tasks, run, pending }: { agents: Array<Rec
         open={!!reassign}
         onClose={() => setReassign(null)}
         onConfirm={async () => {
-          if (reassign) await run('sendDirective', { agentId: reassign.recordId, kind: 'reassign' })
+          const held = reassign?.data.currentTaskId ? tasks.find((t) => t.recordId === reassign.data.currentTaskId) : undefined
+          if (reassign && held) void act('sendDirective', { agentId: reassign.recordId, kind: 'reassign' }, expected.reassign(reassign, held))
           setReassign(null)
         }}
         title="Take the task back?"
@@ -323,7 +330,7 @@ export function AgentsPanel({ agents, tasks, run, pending }: { agents: Array<Rec
   )
 }
 
-export function QuestionsPanel({ questions, agents, run }: { questions: Array<Rec<Question>>; agents: Array<Rec<Agent>>; run: Run }) {
+export function QuestionsPanel({ questions, agents, act, me }: { questions: Array<Rec<Question>>; agents: Array<Rec<Agent>>; act: Act; me: string }) {
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const open = questions.filter((q) => q.data.status === 'open')
   const answered = questions.filter((q) => q.data.status === 'answered').slice(-3).reverse()
@@ -331,7 +338,9 @@ export function QuestionsPanel({ questions, agents, run }: { questions: Array<Re
 
   async function answer(e: FormEvent, id: string) {
     e.preventDefault()
-    if (await run('answerQuestion', { questionId: id, answer: answers[id] })) setAnswers((s) => ({ ...s, [id]: '' }))
+    const text = answers[id] ?? ''
+    setAnswers((s) => ({ ...s, [id]: '' }))
+    if (!(await act('answerQuestion', { questionId: id, answer: text }, expected.answer(id, text, me)))) setAnswers((s) => ({ ...s, [id]: text }))
   }
 
   if (!questions.length) return <p className="text-sm text-muted-foreground">Questions agents ask show up here.</p>
@@ -364,7 +373,7 @@ export function QuestionsPanel({ questions, agents, run }: { questions: Array<Re
   )
 }
 
-export function OverlapsPanel({ overlaps, tasks, agents, run }: { overlaps: Array<Rec<OverlapRow>>; tasks: Array<Rec<Task>>; agents: Array<Rec<Agent>>; run: Run }) {
+export function OverlapsPanel({ overlaps, tasks, agents, act }: { overlaps: Array<Rec<OverlapRow>>; tasks: Array<Rec<Task>>; agents: Array<Rec<Agent>>; act: Act }) {
   const live = overlaps.filter((o) => o.data.status !== 'resolved')
   const task = (id: string) => tasks.find((t) => t.recordId === id)
   const agentOf = (id: string) => {
@@ -393,9 +402,9 @@ export function OverlapsPanel({ overlaps, tasks, agents, run }: { overlaps: Arra
             </div>
             <div className="mt-2 flex gap-1.5">
               {o.data.status === 'open' && (
-                <Button size="sm" variant="secondary" onClick={() => run('setOverlapStatus', { overlapId: o.recordId, status: 'acknowledged' })}>Acknowledge</Button>
+                <Button size="sm" variant="secondary" onClick={() => act('setOverlapStatus', { overlapId: o.recordId, status: 'acknowledged' }, expected.overlap(o.recordId, 'acknowledged'))}>Acknowledge</Button>
               )}
-              <Button size="sm" variant="ghost" onClick={() => run('setOverlapStatus', { overlapId: o.recordId, status: 'resolved' })}>
+              <Button size="sm" variant="ghost" onClick={() => act('setOverlapStatus', { overlapId: o.recordId, status: 'resolved' }, expected.overlap(o.recordId, 'resolved'))}>
                 <CheckCheck /> Resolved
               </Button>
             </div>

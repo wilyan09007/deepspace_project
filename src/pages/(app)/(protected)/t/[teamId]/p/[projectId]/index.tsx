@@ -8,6 +8,8 @@ import { ActivityFeed, AgentsPanel, OverlapsPanel, QuestionsPanel, TaskCard, Tas
 import { GithubPanel } from '@/components/conductor/GithubPanel'
 import { Crumbs, Loading, Page, Panel } from '@/components/conductor/Page'
 import { useAction } from '@/lib/actions'
+import { expected } from '@/lib/expected'
+import { useLiveQuery } from '@/lib/optimistic'
 import {
   COLUMNS,
   GOAL_STATUS,
@@ -26,14 +28,14 @@ import { cn } from '@/lib/utils'
 export default function BoardPage() {
   const { teamId = '', projectId = '' } = useParams()
   const { user } = useUser()
-  const { run, pending } = useAction()
+  const { run, act, pending } = useAction()
   const { records: teams } = useQuery<Team>('teams', { where: { teamId } })
-  const { records: projects, status } = useQuery<Project>('projects', { where: { teamId } })
-  const { records: goals } = useQuery<Goal>('goals', { where: { projectId } })
-  const { records: tasks } = useQuery<Task>('tasks', { where: { projectId } })
-  const { records: agents } = useQuery<Agent>('agents', { where: { projectId } })
-  const { records: overlaps } = useQuery<OverlapRow>('overlaps', { where: { projectId } })
-  const { records: questions } = useQuery<Question>('questions', { where: { projectId } })
+  const { records: projects, status } = useLiveQuery<Project>('projects', { where: { teamId } })
+  const { records: goals } = useLiveQuery<Goal>('goals', { where: { projectId } })
+  const { records: tasks } = useLiveQuery<Task>('tasks', { where: { projectId } })
+  const { records: agents } = useLiveQuery<Agent>('agents', { where: { projectId } })
+  const { records: overlaps } = useLiveQuery<OverlapRow>('overlaps', { where: { projectId } })
+  const { records: questions } = useLiveQuery<Question>('questions', { where: { projectId } })
   const { records: events } = useQuery<EventRow>('events', { where: { projectId }, orderBy: 'at', orderDir: 'desc', limit: 40 })
 
   const project = projects.find((p) => p.recordId === projectId)
@@ -105,12 +107,17 @@ export default function BoardPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {demoRunning ? (
-            <Button variant="secondary" onClick={() => run('stopDemo', { projectId })} disabled={pending === 'stopDemo'} data-testid="stop-demo">
+            <Button
+              variant="secondary"
+              onClick={() => act('stopDemo', { projectId }, goals.filter((g) => g.data.demoState === 'running').flatMap((g) => expected.demo(g.recordId, 'stopping')))}
+              disabled={goals.some((g) => g.data.demoState === 'stopping')}
+              data-testid="stop-demo"
+            >
               <Square /> Stop demo
             </Button>
           ) : (
-            <Button variant="secondary" onClick={() => run('startDemo', { projectId })} disabled={pending === 'startDemo' || !goalTasks.length} data-testid="start-demo" title={goalTasks.length ? 'Three scripted agents work this goal so you can watch and steer. Free.' : 'Plan a goal first'}>
-              <Bot /> {pending === 'startDemo' ? 'Starting…' : 'Run demo agents'}
+            <Button variant="secondary" onClick={() => goal && act('startDemo', { projectId }, expected.demo(goal.recordId, 'running'))} disabled={!goalTasks.length} data-testid="start-demo" title={goalTasks.length ? 'Three scripted agents work this goal so you can watch and steer. Free.' : 'Plan a goal first'}>
+              <Bot /> Run demo agents
             </Button>
           )}
           <Link to={`/t/${teamId}/p/${projectId}/connect`} className={buttonVariants({ variant: 'secondary' })}>
@@ -147,7 +154,7 @@ export default function BoardPage() {
       </div>
 
       {goal ? (
-        <GoalHeader goal={goal} onRetry={() => run('retryPlan', { goalId: goal.recordId })} retrying={pending === 'retryPlan'} />
+        <GoalHeader goal={goal} onRetry={() => act('retryPlan', { goalId: goal.recordId }, expected.retryPlan(goal.recordId))} retrying={pending === 'retryPlan'} />
       ) : (
         <div className="mt-6 rounded-xl border border-dashed border-border p-10 text-center">
           <p className="font-medium">No goals yet</p>
@@ -189,19 +196,19 @@ export default function BoardPage() {
         <div className="space-y-4">
           {(openQuestions > 0 || questions.length > 0) && (
             <Panel title={<>Questions {openQuestions > 0 && <span className="ml-1 rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{openQuestions}</span>}</>}>
-              <QuestionsPanel questions={questions} agents={agents} run={run} />
+              <QuestionsPanel questions={questions} agents={agents} act={act} me={user?.name || 'You'} />
             </Panel>
           )}
           {!isSample && (
             <Panel title="GitHub" testId="github-section">
-              <GithubPanel project={project} tasks={tasks} run={run} pending={pending} onOpenTask={setOpenTask} />
+              <GithubPanel project={project} tasks={tasks} run={run} act={act} pending={pending} onOpenTask={setOpenTask} />
             </Panel>
           )}
           <Panel title={<>Overlaps {liveOverlaps.length > 0 && <span className="ml-1 rounded-full bg-st-paused px-1.5 text-[10px] text-black">{liveOverlaps.length}</span>}</>} testId="overlaps-panel">
-            <OverlapsPanel overlaps={overlaps} tasks={tasks} agents={agents} run={run} />
+            <OverlapsPanel overlaps={overlaps} tasks={tasks} agents={agents} act={act} />
           </Panel>
           <Panel title="Agents" testId="agents-panel">
-            <AgentsPanel agents={agents} tasks={tasks} run={run} pending={pending} />
+            <AgentsPanel agents={agents} tasks={tasks} run={run} act={act} />
           </Panel>
           <Panel title="Activity" testId="activity-panel">
             <ActivityFeed events={events} />
@@ -213,7 +220,7 @@ export default function BoardPage() {
         task={detail}
         agent={detail?.data.agentId ? agents.find((a) => a.recordId === detail.data.agentId) : undefined}
         deps={(detail?.data.dependsOn ?? []).map((d) => tasks.find((t) => t.recordId === d)!).filter(Boolean)}
-        run={run}
+        act={act}
         onClose={() => setOpenTask(null)}
       />
       <NewGoalModal

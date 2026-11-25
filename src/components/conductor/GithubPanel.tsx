@@ -11,9 +11,12 @@ import { CircleDot, ExternalLink, GitPullRequest, Github, RefreshCw } from 'luci
 import { Button, Switch, useToast } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { safeGithubUrl, timeAgo, type GithubItem, type Project, type Task } from '@/lib/conductor'
+import { expected } from '@/lib/expected'
+import type { Patch } from '@/lib/optimistic'
 
 type Rec<T> = { recordId: string; data: T }
 type Run = <T>(name: string, params?: Record<string, unknown>, opts?: { quiet?: boolean }) => Promise<T | null>
+type Act = <T>(name: string, params: Record<string, unknown>, expected: Patch[]) => Promise<T | null>
 
 interface SyncResult {
   skipped?: string
@@ -23,12 +26,14 @@ interface SyncResult {
   doneFromGithub: number
 }
 
-export function GithubPanel({ project, tasks, run, pending, onOpenTask }: { project: Rec<Project>; tasks: Array<Rec<Task>>; run: Run; pending: string | null; onOpenTask: (id: string) => void }) {
+export function GithubPanel({ project, tasks, run, act, pending, onOpenTask }: { project: Rec<Project>; tasks: Array<Rec<Task>>; run: Run; act: Act; pending: string | null; onOpenTask: (id: string) => void }) {
   const projectId = project.recordId
   const location = useLocation()
   const [params, setParams] = useSearchParams()
   const { success, info } = useToast()
   const [connected, setConnected] = useState<boolean | null>(null)
+  const [mirroringBusy, setMirroringBusy] = useState<'on' | 'off' | null>(null)
+  const [planning, setPlanning] = useState<number | null>(null)
   const { records: items } = useQuery<GithubItem>('github_items', { where: { projectId } })
   const titleOf = (id: string) => tasks.find((t) => t.recordId === id)?.data.title
 
@@ -92,16 +97,25 @@ export function GithubPanel({ project, tasks, run, pending, onOpenTask }: { proj
           <label className="flex items-center justify-between gap-3">
             <span>
               Mirror tasks as GitHub issues
-              <span className="block text-[11px] text-muted-foreground">Labels show each task's status; done closes the issue.</span>
+              <span className="block text-[11px] text-muted-foreground" data-testid="mirror-status">
+                {mirroringBusy === 'on'
+                  ? 'Turning on… checking your access and creating issues on GitHub.'
+                  : mirroringBusy === 'off'
+                    ? 'Turning off…'
+                    : "Labels show each task's status; done closes the issue."}
+              </span>
             </span>
             <Switch
               checked={project.data.mirrorIssues === 1}
               onCheckedChange={async (on: boolean) => {
-                const r = await run<SyncResult | { mirrorIssues: false }>('setMirroring', { projectId, on })
+                // Flip at once; the GitHub work (access check, labels, issues) finishes in the background.
+                setMirroringBusy(on ? 'on' : 'off')
+                const r = await act<SyncResult | { mirrorIssues: false }>('setMirroring', { projectId, on }, expected.mirroring(projectId, on))
+                setMirroringBusy(null)
                 if (r && on && 'created' in r) success('Mirroring on', `${r.created} issue(s) created.`)
                 if (r && !on) info('Mirroring off', 'Existing issues stay on GitHub.')
               }}
-              disabled={pending === 'setMirroring'}
+              disabled={mirroringBusy !== null}
               aria-label="Mirror tasks as GitHub issues"
               data-testid="mirror-switch"
             />
@@ -134,8 +148,20 @@ export function GithubPanel({ project, tasks, run, pending, onOpenTask }: { proj
                       <CircleDot className="mr-1 inline h-3 w-3 text-st-done" aria-hidden />
                       <span className="text-muted-foreground">#{i.data.number}</span> {i.data.title}
                     </a>
-                    <Button size="sm" variant="ghost" className="h-7 shrink-0 px-2 text-[11px]" onClick={() => run('planFromIssue', { projectId, issueNumber: i.data.number })} disabled={pending === 'planFromIssue'} title="Plan this issue into tasks (about 13 of your credits)">
-                      Plan as goal
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 shrink-0 px-2 text-[11px]"
+                      onClick={async () => {
+                        // The new goal appears on the board at once (it's created before planning starts).
+                        setPlanning(i.data.number)
+                        await run('planFromIssue', { projectId, issueNumber: i.data.number })
+                        setPlanning(null)
+                      }}
+                      disabled={planning !== null}
+                      title="Plan this issue into tasks (about 13 of your credits)"
+                    >
+                      {planning === i.data.number ? 'Planning…' : 'Plan as goal'}
                     </Button>
                   </li>
                 ))}

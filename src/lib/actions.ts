@@ -5,6 +5,7 @@
 import { useCallback, useState } from 'react'
 import { getAuthToken } from 'deepspace'
 import { useToast } from '@/components/ui'
+import { optimistic, type Patch } from './optimistic'
 
 export class ActionError extends Error {
   constructor(
@@ -48,5 +49,12 @@ export function useAction() {
     },
     [error],
   )
-  return { run, pending }
+  /** Run an action and show its expected result at once (rolled back if it fails). */
+  const act = useCallback(
+    <T,>(name: string, params: Record<string, unknown>, expected: Patch[]) => optimistic<T>(expected, () => run<T>(name, params)),
+    [run],
+  )
+  return { run, act, pending }
 }
+
+export type Act = ReturnType<typeof useAction>['act']

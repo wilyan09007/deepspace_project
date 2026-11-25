@@ -60,6 +60,14 @@ GitHub formats (so Conductor can read them back):
 
 ## Plan changes (newest first)
 
+- **Instant feedback (owner request):** `src/lib/optimistic.ts` overlays each action's expected result
+  (`src/lib/expected.ts`, mirroring ops.ts) on live records the moment it's clicked; rolled back with a
+  toast on failure, kept ~2.5 s after success so the live record takes over without flicker. Used for
+  pause/resume/reassign/note, answers, overlap status, approve/request changes, demo start/stop, plan
+  retry, mirroring on/off (switch flips while GitHub work runs, with a status line) and every Inbox
+  action; the Inbox list and nav count drop handled items at once. Not optimistic (result unknown until
+  the server answers): create team/invite/project, joining, planning output, digest generation.
+
 - **Part 2 built and verified live (2026-11-24 evening, Pacific):** owner connected GitHub; on the private
   `wilyan09007/deepspace_project` repo Conductor added the project, created the `conductor` labels,
   planned a goal into 2 tasks and mirrored them as issues #1 and #2 (by the owner's account, with

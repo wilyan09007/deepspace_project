@@ -6,6 +6,8 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useUser } from 'deepspace'
+import { expected } from '@/lib/expected'
+import { useLiveQuery } from '@/lib/optimistic'
 import { AlertTriangle, Check, GitPullRequest, Inbox as InboxIcon, MessageCircleQuestion, PauseCircle, Undo2 } from 'lucide-react'
 import { Button, Textarea } from '@/components/ui'
 import { AgentChip, Loading, Page, Panel } from '@/components/conductor/Page'
@@ -17,12 +19,15 @@ type Rec<T> = { recordId: string; data: T; createdAt: string; updatedAt: string 
 export default function InboxPage() {
   const { user } = useUser()
   const me = user?.id ?? ''
-  const { run, pending } = useAction()
-  const { records: reviews, status } = useQuery<Task>('tasks', { where: { status: 'review' } })
-  const { records: questions } = useQuery<Question>('questions', { where: { status: 'open' } })
-  const { records: myAgents } = useQuery<Agent>('agents', { where: { ownerUserId: me || '__none__' } })
-  const { records: overlaps } = useQuery<OverlapRow>('overlaps', { where: { status: 'open' } })
-  const { records: tasks } = useQuery<Task>('tasks', { limit: 1000 })
+  const { act } = useAction()
+  // Live data with any just-clicked changes applied, so handled items leave at once.
+  const reviewQuery = useLiveQuery<Task>('tasks', { where: { status: 'review' } })
+  const status = reviewQuery.status
+  const reviews = reviewQuery.records.filter((t) => t.data.status === 'review')
+  const questions = useLiveQuery<Question>('questions', { where: { status: 'open' } }).records.filter((q) => q.data.status === 'open')
+  const { records: myAgents } = useLiveQuery<Agent>('agents', { where: { ownerUserId: me || '__none__' } })
+  const overlaps = useLiveQuery<OverlapRow>('overlaps', { where: { status: 'open' } }).records.filter((o) => o.data.status === 'open')
+  const { records: tasks } = useLiveQuery<Task>('tasks', { limit: 1000 })
   const { records: projects } = useQuery<Project>('projects')
 
   const taskById = new Map(tasks.map((t) => [t.recordId, t]))
@@ -58,7 +63,7 @@ export default function InboxPage() {
           {reviews.length > 0 && (
             <Panel title={`Waiting for review (${reviews.length})`} testId="inbox-reviews">
               <ul className="space-y-3">
-                {reviews.map((t) => <ReviewItem key={t.recordId} task={t} repo={repoName(t.data.projectId)} href={boardLink(t.data, t.recordId)} run={run} pending={pending} />)}
+                {reviews.map((t) => <ReviewItem key={t.recordId} task={t} repo={repoName(t.data.projectId)} href={boardLink(t.data, t.recordId)} act={act} />)}
               </ul>
             </Panel>
           )}
@@ -66,7 +71,7 @@ export default function InboxPage() {
           {questions.length > 0 && (
             <Panel title={`Questions from agents (${questions.length})`} testId="inbox-questions">
               <ul className="space-y-3">
-                {questions.map((q) => <QuestionItem key={q.recordId} question={q} repo={repoName(q.data.projectId)} href={boardLink(q.data, q.data.taskId || undefined)} run={run} />)}
+                {questions.map((q) => <QuestionItem key={q.recordId} question={q} repo={repoName(q.data.projectId)} href={boardLink(q.data, q.data.taskId || undefined)} act={act} me={user?.name || 'You'} />)}
               </ul>
             </Panel>
           )}
@@ -85,7 +90,7 @@ export default function InboxPage() {
                       <Link to={boardLink(task!.data, task!.recordId)} className="truncate hover:text-primary">{task!.data.title}</Link>
                     </span>
                     {agent.data.status === 'paused' && (
-                      <Button size="sm" variant="secondary" onClick={() => run('sendDirective', { agentId: agent.recordId, kind: 'resume' })}>Resume</Button>
+                      <Button size="sm" variant="secondary" onClick={() => act('sendDirective', { agentId: agent.recordId, kind: 'resume' }, expected.resume(agent, task))}>Resume</Button>
                     )}
                   </li>
                 ))}
@@ -105,7 +110,7 @@ export default function InboxPage() {
                     </span>
                     <span className="flex gap-1.5">
                       <Link to={boardLink(o.data)} className="text-xs text-primary hover:underline">Board</Link>
-                      <Button size="sm" variant="ghost" onClick={() => run('setOverlapStatus', { overlapId: o.recordId, status: 'acknowledged' })}>Acknowledge</Button>
+                      <Button size="sm" variant="ghost" onClick={() => act('setOverlapStatus', { overlapId: o.recordId, status: 'acknowledged' }, expected.overlap(o.recordId, 'acknowledged'))}>Acknowledge</Button>
                     </span>
                   </li>
                 ))}
@@ -118,15 +123,16 @@ export default function InboxPage() {
   )
 }
 
-type Run = ReturnType<typeof useAction>['run']
+type Act = ReturnType<typeof useAction>['act']
 
-function ReviewItem({ task, repo, href, run, pending }: { task: Rec<Task>; repo: string; href: string; run: Run; pending: string | null }) {
+function ReviewItem({ task, repo, href, act }: { task: Rec<Task>; repo: string; href: string; act: Act }) {
   const [note, setNote] = useState('')
   const [asking, setAsking] = useState(false)
   const pr = safeGithubUrl(task.data.prUrl)
-  async function sendBack(e: FormEvent) {
+  function sendBack(e: FormEvent) {
     e.preventDefault()
-    if (await run('requestChanges', { taskId: task.recordId, note })) setAsking(false)
+    setAsking(false)
+    void act('requestChanges', { taskId: task.recordId, note }, expected.requestChanges(task.recordId, note))
   }
   return (
     <li className="rounded-lg border border-st-review/40 p-3" data-testid="inbox-review">
@@ -152,7 +158,7 @@ function ReviewItem({ task, repo, href, run, pending }: { task: Rec<Task>; repo:
         </form>
       ) : (
         <div className="mt-2 flex gap-2">
-          <Button size="sm" onClick={() => run('approveTask', { taskId: task.recordId })} disabled={pending === 'approveTask'}><Check /> Approve</Button>
+          <Button size="sm" onClick={() => act('approveTask', { taskId: task.recordId }, expected.approve(task.recordId))}><Check /> Approve</Button>
           <Button size="sm" variant="secondary" onClick={() => setAsking(true)}><Undo2 /> Request changes</Button>
         </div>
       )}
@@ -160,7 +166,7 @@ function ReviewItem({ task, repo, href, run, pending }: { task: Rec<Task>; repo:
   )
 }
 
-function QuestionItem({ question, repo, href, run }: { question: Rec<Question>; repo: string; href: string; run: Run }) {
+function QuestionItem({ question, repo, href, act, me }: { question: Rec<Question>; repo: string; href: string; act: Act; me: string }) {
   const [answer, setAnswer] = useState('')
   return (
     <li className="rounded-lg border border-primary/40 bg-primary/5 p-3">
@@ -172,7 +178,9 @@ function QuestionItem({ question, repo, href, run }: { question: Rec<Question>; 
         className="mt-2 flex gap-2"
         onSubmit={async (e) => {
           e.preventDefault()
-          if (await run('answerQuestion', { questionId: question.recordId, answer })) setAnswer('')
+          const text = answer
+          setAnswer('')
+          if (!(await act('answerQuestion', { questionId: question.recordId, answer: text }, expected.answer(question.recordId, text, me)))) setAnswer(text)
         }}
       >
         <Textarea rows={1} value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Your answer" maxLength={1000} className="min-h-9" aria-label="Your answer" />
