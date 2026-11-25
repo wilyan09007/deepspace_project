@@ -122,11 +122,14 @@ export const actions: Record<string, ActionHandler<Env>> = {
     return plan(ctx, goal.recordId)
   }),
 
-  /** Plan a goal from an open GitHub issue on the board (user-billed, like planGoal). */
+  /** Plan a goal from an open GitHub issue on the board, using the text the member reviewed (user-billed, like planGoal). */
   planFromIssue: action(async (ctx) => {
     const ops = makeOps(ctx.env, ctx.userId, ctx.callerJwt, ctx.callerJwt)
     await ops.bump('plan', PLANNER_RUNS_PER_USER_PER_DAY)
-    const { goalId } = await goalFromIssue(ops, str(ctx.params.projectId), Number(ctx.params.issueNumber))
+    const { goalId } = await goalFromIssue(ops, str(ctx.params.projectId), Number(ctx.params.issueNumber), {
+      title: ctx.params.title,
+      instructions: ctx.params.body,
+    })
     return plan(ctx, goalId)
   }),
 

@@ -101,12 +101,28 @@ describe('assistant tools', () => {
     r = await call(buildAssistantTools(ops('alice'), 'yes'), 'send_directive', { agent_id: agentId, kind: 'reassign' })
     expect(r.done).toBe(false)
 
-    // Re-propose pause, then confirm.
+    // Re-propose pause, then confirm in the next turn.
     await call(buildAssistantTools(ops('alice'), 'pause codex'), 'send_directive', args)
+    clock += 5_000
     r = await call(buildAssistantTools(ops('alice'), 'Yes.'), 'send_directive', args)
     expect(r).toMatchObject({ done: true })
     expect((db.rows.get(agentId)!.data as unknown as Agent).status).toBe('paused')
     expect(db.all('assistant_proposals')).toHaveLength(0)
+  })
+
+  it("a yes can't confirm a proposal made after it was sent", async () => {
+    const { agentId } = await seed()
+    const args = { agent_id: agentId, kind: 'pause' }
+    // The user said "yes" to something else; the model proposes and calls again in the same turn.
+    const turn = buildAssistantTools(ops('alice'), 'yes')
+    expect(await call(turn, 'send_directive', args)).toMatchObject({ done: false, needs_confirmation: true })
+    clock += 1_000
+    expect(await call(turn, 'send_directive', args)).toMatchObject({ done: false, needs_confirmation: true })
+    expect((db.rows.get(agentId)!.data as unknown as Agent).status).toBe('idle')
+    // The user sees the proposal and says yes in the next turn: now it runs.
+    clock += 5_000
+    expect(await call(buildAssistantTools(ops('alice'), 'yes'), 'send_directive', args)).toMatchObject({ done: true })
+    expect((db.rows.get(agentId)!.data as unknown as Agent).status).toBe('paused')
   })
 
   it('proposals expire', async () => {

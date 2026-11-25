@@ -295,7 +295,7 @@ export const conductorSchemas: CollectionSchema[] = [
   {
     // The assistant's pending action awaiting the user's explicit "yes" (one per user).
     name: 'assistant_proposals',
-    columns: [text('userId'), text('agentId'), text('kind'), text('text'), text('summary'), num('expiresAt')],
+    columns: [text('userId'), text('agentId'), text('kind'), text('text'), text('summary'), num('createdAt'), num('expiresAt')],
     uniqueOn: ['userId'],
     permissions: SERVER_ONLY,
   },

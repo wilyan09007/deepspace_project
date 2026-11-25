@@ -184,13 +184,47 @@ describe('reading GitHub back', () => {
     expect(db.rows.get(taskIds[1]!)!.data.status).toBe('done')
   })
 
+  it("ignores a task marker copied onto an issue Squadboard didn't create", async () => {
+    const { projectId, taskIds } = await seed()
+    await setMirroring(ops('alice'), projectId, gh, true, APP)
+    // Anyone can open an issue on a public repo, paste the marker from a mirrored issue, and close it.
+    const copy = (number: number, from: number, state: 'open' | 'closed') =>
+      gh.issues.push({ number, title: 'copy', body: gh.issues[from]!.body, url: `https://github.com/acme/web/issues/${number}`, state, labels: [], author: 'mallory', updatedAt: `m${number}`, comments: [] })
+    copy(50, 1, 'closed')
+    copy(51, 0, 'open')
+    clock += 3 * 60_000
+    expect(await syncProject(ops('alice'), projectId, gh, APP)).toMatchObject({ doneFromGithub: 0 })
+    expect(db.rows.get(taskIds[1]!)!.data).toMatchObject({ status: 'ready', issueNumber: 2 })
+    // The copy is listed as an ordinary open issue, not as the task's.
+    const items = db.all('github_items').map((i) => i.data as unknown as GithubItem)
+    expect(items.find((i) => i.number === 51)!.linkedTaskId).toBe('')
+    expect(items.find((i) => i.number === 1)!.linkedTaskId).toBe(taskIds[0])
+  })
+
+  it('links a task that has no issue yet only to an issue carrying the Squadboard label', async () => {
+    const { projectId, taskIds } = await seed()
+    const tagged = (number: number, taskId: string, state: 'open' | 'closed', labels: string[], author: string) =>
+      gh.issues.push({ number, title: 't', body: `<!-- squadboard:task=${taskId} -->`, url: `https://github.com/acme/web/issues/${number}`, state, labels, author, updatedAt: `t${number}`, comments: [] })
+    // An outsider's issue: no label (only people with access to the repo can set labels).
+    tagged(60, taskIds[0]!, 'closed', [], 'mallory')
+    // One Squadboard created whose number never got saved: it carries Squadboard's labels.
+    tagged(61, taskIds[1]!, 'open', ['squadboard', 'squadboard: ready'], 'alice-gh')
+    await syncProject(ops('alice'), projectId, gh, APP, { force: true })
+    expect(db.rows.get(taskIds[0]!)!.data.issueNumber).toBeUndefined()
+    expect(db.rows.get(taskIds[0]!)!.data.status).not.toBe('done')
+    expect(db.rows.get(taskIds[1]!)!.data.issueNumber).toBe(61)
+  })
+
   it('turns an open issue into a goal and reports the plan back on the issue', async () => {
     const { projectId } = await seed()
     gh.issues.push({ number: 40, title: 'Add search', body: 'Users want search.', url: 'https://github.com/acme/web/issues/40', state: 'open', labels: [], author: 'dana', updatedAt: 'x', comments: [] })
     await syncProject(ops('alice'), projectId, gh, APP, { force: true })
-    const { goalId } = await goalFromIssue(ops('alice'), projectId, 40)
-    expect(db.rows.get(goalId)!.data).toMatchObject({ title: 'Add search', sourceIssueNumber: 40, status: 'planning' })
-    expect(db.rows.get(goalId)!.data.body).toContain('From GitHub issue #40')
+    // The member reviews (and here edits) the issue text before it becomes instructions for agents.
+    const reviewed = { title: 'Search', instructions: 'Add a search box to the header that filters projects by name.' }
+    const { goalId } = await goalFromIssue(ops('alice'), projectId, 40, reviewed)
+    expect(db.rows.get(goalId)!.data).toMatchObject({ title: 'Search', body: reviewed.instructions, sourceIssueNumber: 40, status: 'planning' })
+    // Never falls back to the issue's own text: no reviewed instructions, no goal.
+    await expect(goalFromIssue(ops('alice'), projectId, 40, { title: 'Search', instructions: '' })).rejects.toMatchObject({ code: 'invalid_input' })
     // (planner runs here in the real flow) — fake two planned tasks:
     const s = new Store(db.as('system'))
     const goal = db.rows.get(goalId)!.data as unknown as Goal
@@ -198,6 +232,6 @@ describe('reading GitHub back', () => {
     await s.create<Task>('tasks', { teamId: goal.teamId, projectId, goalId, title: 'Search box', order: 1, status: 'ready' })
     await commentPlanOnIssue(ops('alice'), goalId, gh, APP)
     expect(gh.issues.find((i) => i.number === 40)!.comments[0]).toContain('- #41 Search API')
-    await expect(goalFromIssue(ops('alice'), projectId, 999)).rejects.toMatchObject({ code: 'not_found' })
+    await expect(goalFromIssue(ops('alice'), projectId, 999, reviewed)).rejects.toMatchObject({ code: 'not_found' })
   })
 })

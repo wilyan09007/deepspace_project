@@ -26,14 +26,30 @@ interface SyncResult {
   doneFromGithub: number
 }
 
-export function GithubPanel({ project, tasks, run, act, pending, onOpenTask }: { project: Rec<Project>; tasks: Array<Rec<Task>>; run: Run; act: Act; pending: string | null; onOpenTask: (id: string) => void }) {
+export function GithubPanel({
+  project,
+  tasks,
+  run,
+  act,
+  pending,
+  onOpenTask,
+  onPlanIssue,
+}: {
+  project: Rec<Project>
+  tasks: Array<Rec<Task>>
+  run: Run
+  act: Act
+  pending: string | null
+  onOpenTask: (id: string) => void
+  /** Open the New goal dialog pre-filled with this issue, for the member to review before planning. */
+  onPlanIssue: (issue: GithubItem) => void
+}) {
   const projectId = project.recordId
   const location = useLocation()
   const [params, setParams] = useSearchParams()
   const { success, info } = useToast()
   const [connected, setConnected] = useState<boolean | null>(null)
   const [mirroringBusy, setMirroringBusy] = useState<'on' | 'off' | null>(null)
-  const [planning, setPlanning] = useState<number | null>(null)
   const { records: items } = useQuery<GithubItem>('github_items', { where: { projectId } })
   const titleOf = (id: string) => tasks.find((t) => t.recordId === id)?.data.title
 
@@ -152,16 +168,10 @@ export function GithubPanel({ project, tasks, run, act, pending, onOpenTask }: {
                       size="sm"
                       variant="ghost"
                       className="h-7 shrink-0 px-2 text-[11px]"
-                      onClick={async () => {
-                        // The new goal appears on the board at once (it's created before planning starts).
-                        setPlanning(i.data.number)
-                        await run('planFromIssue', { projectId, issueNumber: i.data.number })
-                        setPlanning(null)
-                      }}
-                      disabled={planning !== null}
-                      title="Plan this issue into tasks (about 13 of your credits)"
+                      onClick={() => onPlanIssue(i.data)}
+                      title="Review this issue's text, then plan it into tasks (about 13 of your credits)"
                     >
-                      {planning === i.data.number ? 'Planning…' : 'Plan as goal'}
+                      Plan as goal
                     </Button>
                   </li>
                 ))}

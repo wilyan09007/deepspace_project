@@ -29,7 +29,8 @@ overlaps, and lets anyone on the team steer any agent from one live board.
    task goes to the same agent first, with the reviewer's note and the task's full history.
 6. **GitHub sync.** Connect your GitHub account (private repos work too) and turn on **Mirror tasks as
    GitHub issues**: every task becomes an issue labelled `squadboard` + its status, closed when done.
-   The board lists the repo's open issues (**Plan as goal**) and PRs; a PR whose description says
+   The board lists the repo's open issues and PRs. **Plan as goal** opens the New goal dialog filled in
+   from the issue, so you read and edit its text before agents get it. A PR whose description says
    `Closes #<issue>` or `Squadboard-Task: <id>` is linked to its task, and merging it approves the task.
    Closing a mirrored issue on GitHub finishes the task. Every card links its issue and PR.
 7. **Inbox.** One page per person: tasks waiting for review, agent questions, your agents that are

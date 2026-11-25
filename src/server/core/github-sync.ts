@@ -153,7 +153,7 @@ export async function syncProject(ops: Ops, projectId: string, gh: GitHubWriter,
     for (const issue of issues) {
       const taskId = parseTaskMarker(issue.body)
       const task = taskId ? byId.get(taskId) : undefined
-      if (!task) continue
+      if (!task || !isTasksIssue(task, issue)) continue
       if (!task.data.issueNumber) {
         await ops.store.update<Task>('tasks', task.recordId, { issueNumber: issue.number, issueUrl: issue.url })
         task.data.issueNumber = issue.number
@@ -241,7 +241,7 @@ export async function syncProject(ops: Ops, projectId: string, gh: GitHubWriter,
     result.openIssues = openIssues.length
     result.openPrs = openPrs.length
     await replaceItems(ops, project, [
-      ...openIssues.map((i) => item(project, 'issue', i, parseTaskMarker(i.body) ?? '')),
+      ...openIssues.map((i) => item(project, 'issue', i, byIssue.get(i.number)?.recordId ?? '')),
       ...openPrs.map((p) => item(project, 'pr', p, prLinks.get(`${p.number}`) ?? '')),
     ])
     await ops.store.update<Project>('projects', projectId, { ghSyncError: '' })
@@ -251,6 +251,17 @@ export async function syncProject(ops: Ops, projectId: string, gh: GitHubWriter,
     await ops.store.update<Project>('projects', projectId, { ghSyncError: message })
     throw e instanceof OpsError ? e : new OpsError('github_sync_failed', message, 502)
   }
+}
+
+/**
+ * Whether an issue carrying a task's marker really is that task's issue. Anyone can paste a marker
+ * into an issue on a public repo, so the marker alone proves nothing: a task only answers to the
+ * issue it saved, and a task with none saved only links to an issue with Squadboard's label
+ * (GitHub lets only people with access to the repo set labels).
+ */
+function isTasksIssue(task: Row<Task>, issue: IssueSummary): boolean {
+  if (task.data.issueNumber) return task.data.issueNumber === issue.number
+  return issue.labels.some((l) => OUR_LABEL_PREFIXES.some((p) => l.startsWith(p)))
 }
 
 function item(project: Row<Project>, kind: 'issue' | 'pr', i: IssueSummary | PullSummary, linkedTaskId: string): GithubItem {
@@ -285,15 +296,22 @@ async function replaceItems(ops: Ops, project: Row<Project>, items: GithubItem[]
   for (const stale of byKey.values()) await ops.store.remove('github_items', stale.recordId)
 }
 
-/** Create a goal from an open GitHub issue on the board (the caller then plans it). */
-export async function goalFromIssue(ops: Ops, projectId: string, issueNumber: number): Promise<{ goalId: string; issue: GithubItem }> {
+/**
+ * Create a goal from an open GitHub issue on the board (the caller then plans it). Anyone can open an
+ * issue on a public repo, so the issue's text never goes to the planner or agents as-is: the board
+ * pre-fills the New goal dialog with it, and `reviewed` is what the member read, edited and submitted.
+ */
+export async function goalFromIssue(
+  ops: Ops,
+  projectId: string,
+  issueNumber: number,
+  reviewed: { title: unknown; instructions: unknown },
+): Promise<{ goalId: string; issue: GithubItem }> {
   const project = await ops.loadForMember<Project>('projects', projectId, 'Project')
   const [row] = await ops.store.query<GithubItem>('github_items', { key: `${project.recordId}:issue:${issueNumber}` })
   if (!row) throw new OpsError('not_found', `Issue #${issueNumber} isn't in the synced list — click Sync first`, 404)
   const issue = row.data
-  // The issue title names the goal; its description (or, if empty, its title) is the instructions.
-  const instructions = `${issue.body.trim() || issue.title}\n\n(From GitHub issue #${issue.number}: ${issue.url})`
-  const { goalId } = await ops.createGoal(projectId, issue.title, instructions)
+  const { goalId } = await ops.createGoal(projectId, reviewed.title, reviewed.instructions)
   await ops.store.update<Goal>('goals', goalId, { sourceIssueNumber: issue.number, sourceIssueUrl: issue.url })
   return { goalId, issue }
 }

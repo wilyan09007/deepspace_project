@@ -139,6 +139,8 @@ interface Proposal {
   kind: string
   text: string
   summary: string
+  /** When it was proposed; only a "yes" sent after this can confirm it. */
+  createdAt: number
   expiresAt: number
 }
 
@@ -156,6 +158,8 @@ function fail(e: unknown): { error: string } {
 const ago = (now: number, ms?: number) => (ms ? `${Math.max(0, Math.round((now - ms) / 60000))} min ago` : 'never')
 
 export function buildAssistantTools(ops: Ops, currentMessage: string): ToolSet {
+  // When currentMessage arrived: tools are built once per user message, before the model runs.
+  const turnStartedAt = ops.now()
   const safe = <A, R>(fn: (args: A) => Promise<R>) => async (args: A) => {
     try {
       return await fn(args)
@@ -254,7 +258,10 @@ export function buildAssistantTools(ops: Ops, currentMessage: string): ToolSet {
           existing.data.agentId === agent_id &&
           existing.data.kind === kind &&
           (existing.data.text ?? '') === clip(text ?? '', 1000) &&
-          existing.data.expiresAt > ops.now()
+          existing.data.expiresAt > ops.now() &&
+          // The user can only have said yes to a proposal they saw: one made before this message.
+          // A proposal made in this same turn (and any stored before this field existed) is re-asked.
+          (existing.data.createdAt ?? Infinity) < turnStartedAt
         if (matches && isConfirmation(currentMessage)) {
           await ops.store.remove('assistant_proposals', existing.recordId)
           const result = await ops.sendDirective(agent_id, kind, text)
@@ -262,7 +269,7 @@ export function buildAssistantTools(ops: Ops, currentMessage: string): ToolSet {
         }
         const summary =
           kind === 'note' ? `Send ${agent.data.name} this note: “${clip(text ?? '', 200)}”` : `${kind[0]!.toUpperCase()}${kind.slice(1)} ${agent.data.name}`
-        const proposal: Proposal = { userId: ops.userId, agentId: agent_id, kind, text: clip(text ?? '', 1000), summary, expiresAt: ops.now() + PROPOSAL_TTL_MS }
+        const proposal: Proposal = { userId: ops.userId, agentId: agent_id, kind, text: clip(text ?? '', 1000), summary, createdAt: ops.now(), expiresAt: ops.now() + PROPOSAL_TTL_MS }
         if (existing) await ops.store.update<Proposal>('assistant_proposals', existing.recordId, proposal)
         else await ops.store.create<Proposal>('assistant_proposals', proposal)
         return { done: false, needs_confirmation: true, proposal: summary, instruction: 'Ask the user to reply "yes" to confirm. Do not call send_directive again until they do.' }

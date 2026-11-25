@@ -14,8 +14,10 @@ import {
   COLUMNS,
   GOAL_STATUS,
   repoUrl,
+  safeGithubUrl,
   type Agent,
   type EventRow,
+  type GithubItem,
   type Goal,
   type OverlapRow,
   type Project,
@@ -41,6 +43,12 @@ export default function BoardPage() {
   const project = projects.find((p) => p.recordId === projectId)
   const [pickedGoal, setPickedGoal] = useState<string | null>(null)
   const [newGoalOpen, setNewGoalOpen] = useState(false)
+  // The GitHub issue the New goal dialog was opened from, if any; `n` gives each opening a fresh dialog.
+  const [goalDraft, setGoalDraft] = useState<{ n: number; issue: GithubItem | null }>({ n: 0, issue: null })
+  const openNewGoal = (issue: GithubItem | null = null) => {
+    setGoalDraft((d) => ({ n: d.n + 1, issue }))
+    setNewGoalOpen(true)
+  }
   const [searchParams, setSearchParams] = useSearchParams()
   const [openTask, setOpenTaskState] = useState<string | null>(() => searchParams.get('task'))
   // ?task=<id> (used by links in mirrored GitHub issues) opens that task.
@@ -147,7 +155,7 @@ export default function BoardPage() {
           </button>
         ))}
         {!isSample && (
-          <Button size="sm" onClick={() => setNewGoalOpen(true)} data-testid="new-goal">
+          <Button size="sm" onClick={() => openNewGoal()} data-testid="new-goal">
             <Plus /> New goal
           </Button>
         )}
@@ -161,7 +169,7 @@ export default function BoardPage() {
           <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
             Describe what you want built. Squadboard reads the repo and splits it into tasks with the files each will touch, so agents can work in parallel without colliding.
           </p>
-          <Button className="mt-4" onClick={() => setNewGoalOpen(true)}><Plus /> New goal</Button>
+          <Button className="mt-4" onClick={() => openNewGoal()}><Plus /> New goal</Button>
         </div>
       )}
 
@@ -201,7 +209,7 @@ export default function BoardPage() {
           )}
           {!isSample && (
             <Panel title="GitHub" testId="github-section">
-              <GithubPanel project={project} tasks={tasks} run={run} act={act} pending={pending} onOpenTask={setOpenTask} />
+              <GithubPanel project={project} tasks={tasks} run={run} act={act} pending={pending} onOpenTask={setOpenTask} onPlanIssue={openNewGoal} />
             </Panel>
           )}
           <Panel title={<>Overlaps {liveOverlaps.length > 0 && <span className="ml-1 rounded-full bg-st-paused px-1.5 text-[10px] text-black">{liveOverlaps.length}</span>}</>} testId="overlaps-panel">
@@ -224,12 +232,16 @@ export default function BoardPage() {
         onClose={() => setOpenTask(null)}
       />
       <NewGoalModal
+        key={goalDraft.n}
         open={newGoalOpen}
+        issue={goalDraft.issue}
         onClose={() => setNewGoalOpen(false)}
         onSubmit={async (title, body) => {
           setNewGoalOpen(false)
           setPickedGoal(null) // show the newest goal, i.e. the one being planned
-          await run('planGoal', { projectId, title, body })
+          const issue = goalDraft.issue
+          if (issue) await run('planFromIssue', { projectId, issueNumber: issue.number, title, body })
+          else await run('planGoal', { projectId, title, body })
         }}
       />
       {askOpen && user && (
@@ -296,9 +308,26 @@ function GoalHeader({ goal, onRetry, retrying }: { goal: { recordId: string; dat
   )
 }
 
-function NewGoalModal({ open, onClose, onSubmit }: { open: boolean; onClose: () => void; onSubmit: (title: string, body: string) => void }) {
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
+/** A GitHub issue's text as a starting draft: its title, and its description (or title) plus where it came from. */
+function issueDraft(issue: GithubItem): { title: string; body: string } {
+  const source = `\n\n(From GitHub issue #${issue.number}: ${issue.url})`
+  return { title: issue.title.slice(0, 140), body: (issue.body.trim() || issue.title).slice(0, 4000 - source.length) + source }
+}
+
+function NewGoalModal({
+  open,
+  issue,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean
+  /** Pre-fill from this GitHub issue; the member reviews the text before it reaches the planner and agents. */
+  issue: GithubItem | null
+  onClose: () => void
+  onSubmit: (title: string, body: string) => void
+}) {
+  const [title, setTitle] = useState(() => (issue ? issueDraft(issue).title : ''))
+  const [body, setBody] = useState(() => (issue ? issueDraft(issue).body : ''))
   function submit(e: FormEvent) {
     e.preventDefault()
     onSubmit(title, body)
@@ -309,10 +338,20 @@ function NewGoalModal({ open, onClose, onSubmit }: { open: boolean; onClose: () 
     <Modal open={open} onClose={onClose}>
       <form onSubmit={submit}>
         <Modal.Header>
-          <Modal.Title>New goal</Modal.Title>
+          <Modal.Title>{issue ? `New goal from issue #${issue.number}` : 'New goal'}</Modal.Title>
           <Modal.Description>Squadboard reads the repository and plans your instructions into tasks for agents. Planning uses your own DeepSpace credits (one Claude call plus a few GitHub reads).</Modal.Description>
         </Modal.Header>
         <Modal.Body className="space-y-4">
+          {issue && (
+            <p className="rounded-md border border-st-paused/40 bg-st-paused/10 p-3 text-xs" data-testid="issue-review-note">
+              Pre-filled from{' '}
+              <a href={safeGithubUrl(issue.url) ?? undefined} target="_blank" rel="noreferrer noopener" className="underline">
+                GitHub issue #{issue.number}
+              </a>
+              {issue.author ? ` by @${issue.author}` : ''}. Agents will follow these instructions, and anyone who can open issues on the repo can write them,
+              so read them first and remove anything you don't want built.
+            </p>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="goal-title">Title</Label>
             <Input id="goal-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={140} placeholder="Dark mode" autoFocus />
