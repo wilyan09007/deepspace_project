@@ -47,6 +47,25 @@ test('teams: invite link joins a teammate; outsiders see nothing', async ({ user
   await expect(eve!.page.getByTestId('team-not-found')).toBeVisible({ timeout: 15_000 })
 })
 
+test('teams: the owner removes a member, who then loses access', async ({ users }) => {
+  const [alice, bob] = await users(['Alice', 'Bob'])
+  const teamId = await createTeam(alice!, `E2E rm ${Date.now().toString(36)}`)
+  await bob!.page.goto(await invite(alice!))
+  await expect(bob!.page).toHaveURL(new RegExp(`/t/${teamId}$`), { timeout: 20_000 })
+  // Only the owner sees Remove, and never on their own row.
+  await expect(bob!.page.getByTestId('members-panel')).toContainText('Alice')
+  await expect(bob!.page.getByTestId('remove-member')).toHaveCount(0)
+  const members = alice!.page.getByTestId('members-panel')
+  await expect(members).toContainText('Bob', { timeout: 15_000 })
+  await expect(members.getByTestId('remove-member')).toHaveCount(1)
+
+  await members.getByTestId('remove-member').click()
+  await members.getByTestId('confirm-remove-member').click()
+  await expect(members).not.toContainText('Bob', { timeout: 15_000 })
+  await bob!.page.goto(`/t/${teamId}`)
+  await expect(bob!.page.getByTestId('team-not-found')).toBeVisible({ timeout: 15_000 })
+})
+
 test('board: demo agents work, overlap and ask; a teammate answers and steers live', async ({ users }) => {
   test.setTimeout(240_000)
   const [alice, bob, eve] = await users(['Alice', 'Bob', 'Eve'])

@@ -20,6 +20,8 @@ export default function TeamPage() {
   const [repo, setRepo] = useState('')
   const [invite, setInvite] = useState<{ code: string; expiresAt: number } | null>(null)
   const [sampleReady, setSampleReady] = useState(false)
+  // The member whose Remove button was clicked once (the second click removes).
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
 
   const [github, setGithub] = useState<boolean | null>(null)
   useEffect(() => {
@@ -34,6 +36,7 @@ export default function TeamPage() {
   const team = teams[0]
   const active = members.filter((m) => m.data.status !== 'removed')
   const mine = active.find((m) => m.data.userId === user?.id)
+  const isOwner = mine?.data.role === 'owner'
 
   if (status === 'loading') return <Page><Loading /></Page>
   if (!team) {
@@ -202,9 +205,36 @@ export default function TeamPage() {
           <Panel title={`Members (${active.length})`} testId="members-panel">
             <ul className="space-y-2">
               {active.map((m) => (
-                <li key={m.recordId} className="flex items-center justify-between text-sm">
+                <li key={m.recordId} className="flex items-center justify-between gap-2 text-sm">
                   <span className="truncate">{m.data.userName || 'Member'}{m.data.userId === user?.id && <span className="text-muted-foreground"> (you)</span>}</span>
-                  <span className="text-xs text-muted-foreground">{m.data.role}</span>
+                  {isOwner && m.data.userId !== user?.id ? (
+                    // Two clicks: the first asks, the second removes.
+                    confirmRemove === m.data.userId ? (
+                      <span className="flex shrink-0 gap-1">
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setConfirmRemove(null)}>Cancel</Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="h-7 px-2 text-xs"
+                          data-testid="confirm-remove-member"
+                          disabled={pending === 'removeMember'}
+                          onClick={async () => {
+                            const r = await run<{ removed: boolean }>('removeMember', { teamId, userId: m.data.userId })
+                            setConfirmRemove(null)
+                            if (r?.removed) success(`Removed ${m.data.userName || 'member'}. Tasks their agents held are back in Ready.`)
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      </span>
+                    ) : (
+                      <Button size="sm" variant="ghost" className="h-7 shrink-0 px-2 text-xs text-muted-foreground" data-testid="remove-member" onClick={() => setConfirmRemove(m.data.userId)}>
+                        Remove
+                      </Button>
+                    )
+                  ) : (
+                    <span className="text-xs text-muted-foreground">{m.data.role}</span>
+                  )}
                 </li>
               ))}
             </ul>

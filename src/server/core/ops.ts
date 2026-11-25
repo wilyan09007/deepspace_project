@@ -465,6 +465,34 @@ export class Ops {
     return { teamId, alreadyMember: false }
   }
 
+  /**
+   * The owner removes a member. Every membership check skips removed rows, so their access (and their
+   * agents', which act as them) ends at once; tasks their agents held go back to Ready. A new invite
+   * brings them back.
+   */
+  async removeMember(teamId: string, memberUserId: unknown): Promise<void> {
+    const me = await this.requireMember(teamId)
+    if (me.data.role !== 'owner') throw new OpsError('not_owner', 'Only the team owner can remove members', 403)
+    const userId = clip(memberUserId, 100)
+    if (userId === this.userId) throw new OpsError('invalid_input', "You can't remove yourself from your own team")
+    const member = (await this.store.query<Member>('team_members', { teamId, userId })).find((m) => m.data.status !== 'removed')
+    if (!member) throw new OpsError('not_found', 'Member not found', 404)
+    await this.store.update<Member>('team_members', member.recordId, { status: 'removed' })
+
+    const projects = new Set<string>()
+    for (const agent of await this.store.query<Agent>('agents', { teamId, ownerUserId: userId })) {
+      const task = agent.data.currentTaskId ? await this.store.get<Task>('tasks', agent.data.currentTaskId) : null
+      if (task && task.data.agentId === agent.recordId && ['assigned', 'in_progress', 'blocked', 'paused'].includes(task.data.status)) {
+        for (const c of await this.store.query<Claim>('task_claims', { taskId: task.recordId })) await this.store.remove('task_claims', c.recordId)
+        await this.store.update<Task>('tasks', task.recordId, { status: 'ready', agentId: null, lastAgentId: agent.recordId, updatedAtMs: this.now() })
+        projects.add(task.data.projectId)
+      }
+      await this.store.update<Agent>('agents', agent.recordId, { status: 'offline', currentTaskId: null })
+    }
+    for (const projectId of projects) await this.recomputeOverlaps(teamId, projectId)
+    await this.log({ teamId, kind: 'team', message: `removed ${member.data.userName || 'a member'} from the team` })
+  }
+
   // ── Projects ────────────────────────────────────────────────────────────
 
   async createProject(teamId: string, repoRef: unknown): Promise<{ projectId: string; existed: boolean }> {

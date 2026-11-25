@@ -77,6 +77,32 @@ describe('teams and invites', () => {
     await expectCode(eve.registerAgent(projectId, 'spy'), 'not_found')
   })
 
+  it('the owner removes a member: access ends and their agents hand back their tasks', async () => {
+    const { teamId, projectId, taskIds } = await seed([{ title: 'A', files: ['a.ts'] }])
+    const b1 = (await ops('bob').registerAgent(projectId, 'b1')).agentId
+    await ops('bob').nextTask(b1)
+    await ops('alice').removeMember(teamId, 'bob')
+    // Bob, and his agent (which acts as him), can no longer see or touch the team.
+    await expectCode(ops('bob').requireMember(teamId), 'not_member')
+    await expectCode(ops('bob').checkIn(b1, { summary: 'still here' }), 'not_found')
+    // The task he held is free for the rest of the team.
+    expect(db.rows.get(taskIds[0]!)!.data).toMatchObject({ status: 'ready', agentId: null })
+    expect(db.all('task_claims')).toHaveLength(0)
+    const a1 = (await ops('alice').registerAgent(projectId, 'a1')).agentId
+    expect((await ops('alice').nextTask(a1)).task?.taskId).toBe(taskIds[0])
+    // A new invite brings him back.
+    await ops('bob').joinTeam((await ops('alice').createInvite(teamId)).code)
+    expect((await ops('bob').requireMember(teamId)).data.status).toBe('active')
+  })
+
+  it('only the owner removes members, and not themselves', async () => {
+    const { teamId } = await seed([])
+    await expectCode(ops('bob').removeMember(teamId, 'alice'), 'not_owner')
+    await expectCode(ops('eve').removeMember(teamId, 'bob'), 'not_member')
+    await expectCode(ops('alice').removeMember(teamId, 'alice'), 'invalid_input')
+    await expectCode(ops('alice').removeMember(teamId, 'eve'), 'not_found')
+  })
+
   it('rate-limits team creation per user per day', async () => {
     const alice = ops('alice')
     for (let i = 0; i < 20; i++) await alice.createTeam(`T${i}`)

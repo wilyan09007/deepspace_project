@@ -83,6 +83,10 @@ export const actions: Record<string, ActionHandler<Env>> = {
 
   joinTeam: action(({ env, userId, callerJwt, params }) => makeOps(env, userId, undefined, callerJwt).joinTeam(params.code)),
 
+  removeMember: action(({ env, userId, callerJwt, params }) =>
+    makeOps(env, userId, undefined, callerJwt).removeMember(str(params.teamId), params.userId).then(() => ({ removed: true })),
+  ),
+
   /** Build (or refresh) today's digest for a team from its activity. Free. */
   generateDigest: action(({ env, userId, callerJwt, params }) =>
     generateTodaysDigest(makeOps(env, userId, undefined, callerJwt), str(params.teamId)),
