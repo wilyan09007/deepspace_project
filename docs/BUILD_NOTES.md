@@ -1,6 +1,60 @@
 # Build notes (working memory — read this first on resume)
 
-State as of the end of session 1. Spec: `docs/SPEC.md`. Decisions: `docs/DECISIONS.md`.
+Spec: `docs/SPEC.md`. Decisions: `docs/DECISIONS.md`.
+
+## Progress log (newest first)
+
+- **Session 1, later:** key verified working from a second session (whoami OK as the owner's
+  developer account). Built and committed:
+  - `src/schemas/conductor-schema.ts` (+ registered in `src/schemas.ts`), `src/schemas.test.ts`
+    (runs the SDK's `lintSchemas`).
+  - `src/server/core/engine.ts` + `engine.test.ts` — 19 passing tests.
+  - `src/server/core/store.ts` (typed ActionTools wrapper, `OpsError`) and
+    `src/server/core/integration.ts` (`callIntegration(env, payer, endpoint, body)` with an explicit
+    payer: `{kind:'user', jwt}` or `{kind:'owner'}`).
+  - **Next file to write: `src/server/core/ops.ts`** (design below under "ops.ts design"), then
+    `planner.ts`, export `createActionTools` from `src/server/action-routes.ts`, agent tools in
+    `src/ai/tools.ts`, actions in `src/actions/index.ts`.
+- **Unit tests before the app is registered:** the repo's `vitest.config.ts` refuses to run until
+  `wrangler.toml` has a real `DEEPSPACE_APP_ID` (minted on first `dev start`/`deploy`/`app init`).
+  Until then run with a throwaway config outside the repo that defines the id, e.g.
+  `export default { root: '<repo>', define: { __DEEPSPACE_APP_ID__: '"app_offline_test"' },
+  resolve: { alias: { '@': '<repo>/src' } }, test: { include: ['src/**/*.test.ts'] } }` saved as
+  `.mjs` (no imports — it lives outside node_modules' reach), run with `npx vitest run --config <file>`.
+- Action-tool `query` has **no default limit** (the 50 default applies only to AI tools); `where`
+  is equality on declared columns (unknown keys are refused).
+- `users` rows are keyed by userId: `store.get('users', userId)` → `data.name`, `data.email`.
+- Integration input shapes (outputs aren't documented — log the first real response and adapt):
+  `github/get-repository {owner, repo}`, `github/get-repository-tree {owner, repo, sha, recursive}`,
+  `github/get-repository-contents {owner, repo, path, ref}`, `github/get-repository-readme {owner, repo}`,
+  `github/get-pull-request {owner, repo, pull_number}`,
+  `email/send {to, subject, html|text, reply_to, cc, bcc}`.
+
+## ops.ts design (shared by agent tools, actions, demo job, cron)
+
+Context `{ store, userId, now }`; every write checks `requireMember(teamId)` first.
+- Teams: `createTeam(name)` (team id = record id, so the row covers itself), `createInvite(teamId)`
+  (8-char one-time code, 7-day expiry), `joinTeam(code)`.
+- Projects: `createProject(teamId, repoRef, payer)` — checks the repo via `github/get-repository`.
+- Goals: `planGoal` runs in a **server action** (user pays; caller JWT lives ~5 min), writes
+  `goal.planStage` as it goes so the board shows progress live. Per-user cap via `usage_counters`.
+- Agents: `registerAgent({projectId, name})` upsert; every agent tool verifies
+  `agent.ownerUserId === caller` (demo agents: the user who started the demo).
+- `nextTask(agentId)`: paused → return directives only; existing current task → return it; else
+  `rankReadyTasks` and claim the best via `task_claims` create (uniqueOn taskId; on conflict try the
+  next), then set task assigned + agent working, upsert overlaps, log event.
+- `checkIn(agentId, {status, summary, files})`: merge touchedFiles, update status/summary/lastSeen,
+  recompute overlaps, **deliver pending directives** (set deliveredAt), return directives + overlaps
+  (with the other agent's name, task, last summary) + answers to this agent's questions.
+- Directives take effect when sent (board updates at once) and are delivered on the next check-in:
+  pause → agent+task paused; resume → working; reassign → delete claim, task back to ready,
+  agent idle; note/answer → message only.
+- `askHuman`, `completeTask` (delete claim, resolve the task's overlaps, goal done when all tasks
+  done; never invent PR links), `answerQuestion` (also sends an `answer` directive),
+  `setOverlapStatus`, `loadSample` (captured real plan, labeled), `startDemo` (3 demo agents +
+  `demo-run` job; job payload holds ids only; restrict JobRoom reads to admins).
+- Demo job: tick every ~3.5 s via `ctx.continue`; scripted summaries from task titles/files; one
+  deliberate overlap and one question; obeys directives; stops when tasks are done or after 80 ticks.
 
 ## Where things stand
 
