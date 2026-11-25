@@ -136,7 +136,7 @@ export async function savePlan(ops: Ops, goal: Row<Goal>, plan: ValidatedPlan, e
     projectId: goal.data.projectId,
     kind: 'plan',
     message: `planned “${goal.data.title}” into ${ids.length} tasks`,
-    actorName: 'Conductor',
+    actorName: 'Squadboard',
   })
   return ids
 }

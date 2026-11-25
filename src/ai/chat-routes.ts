@@ -295,7 +295,7 @@ export function registerAiChatRoutes(app: Hono<AppContext>, resolveAccess: Resol
     // mid-stream. The local assistant routes use the same executor and
     // context, and streamDeepSpaceAgent caps each tool result for the model,
     // keeping both surfaces' tool behavior identical.
-    // Guardrail layer 4: Conductor's own scoped tools only (no raw record
+    // Guardrail layer 4: Squadboard's own scoped tools only (no raw record
     // tools); each re-checks team membership, and steering needs a confirmed
     // proposal (src/ai/assistant.ts).
     const tools = buildAssistantTools(ops, content)

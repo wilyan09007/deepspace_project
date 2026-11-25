@@ -1,5 +1,5 @@
 /**
- * Every time-based rule in Conductor, proven in seconds with a fake clock.
+ * Every time-based rule in Squadboard, proven in seconds with a fake clock.
  * Each test calls the same function production uses; only the clock moves.
  *
  *   npx vitest run src/server/core/timing.test.ts

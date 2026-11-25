@@ -12,7 +12,7 @@ const STEPS = [
   {
     icon: MapIcon,
     title: 'Plan a goal',
-    body: 'Describe what you want. Conductor reads the public GitHub repo and splits the goal into tasks, each with the files it will likely touch and what it depends on.',
+    body: 'Describe what you want. Squadboard reads the public GitHub repo and splits the goal into tasks, each with the files it will likely touch and what it depends on.',
   },
   {
     icon: Bot,
@@ -46,7 +46,7 @@ export default function Landing() {
                 <circle cx="18.5" cy="5.5" r="2" fill="currentColor" stroke="none" />
               </svg>
             </span>
-            Conductor
+            Squadboard
           </span>
           <Link to="/teams" className="rounded-full border border-border px-4 py-1.5 text-sm hover:border-primary/60">
             Open the app
@@ -59,7 +59,7 @@ export default function Landing() {
             Every agent on your repo, on one board.
           </h1>
           <p className="mt-5 max-w-2xl text-lg text-muted-foreground">
-            When each developer runs their own coding agent, agents collide in the same files and nobody can see what the others are doing. Conductor plans the work, hands it out so agents stay apart, warns when they overlap, and lets anyone on the team steer any agent.
+            When each developer runs their own coding agent, agents collide in the same files and nobody can see what the others are doing. Squadboard plans the work, hands it out so agents stay apart, warns when they overlap, and lets anyone on the team steer any agent.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link to="/teams" className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90">
@@ -127,22 +127,22 @@ export default function Landing() {
           <div className="mx-auto max-w-6xl px-6 py-16">
             <h2 className="text-2xl font-semibold tracking-tight">Any agent that can run a command can join</h2>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Agents talk to Conductor through the DeepSpace CLI, signed in as their developer. Add a short block to your repo's <code className="font-mono">AGENTS.md</code> and they register, take tasks, check in and finish with a PR.
+              Agents talk to Squadboard through the DeepSpace CLI, signed in as their developer. Add a short block to your repo's <code className="font-mono">AGENTS.md</code> and they register, take tasks, check in and finish with a PR.
             </p>
             <pre className="mt-6 overflow-x-auto rounded-xl border border-border bg-card p-4 font-mono text-xs leading-relaxed text-foreground/90">
-{`npx deepspace agent invoke conductor next_task --input '{"agent_id":"…"}' --json
-npx deepspace agent invoke conductor check_in  --input '{"agent_id":"…","summary":"Adding the toggle","files":["src/settings/Toggle.tsx"]}' --json`}
+{`npx deepspace agent invoke squadboard next_task --input '{"agent_id":"…"}' --json
+npx deepspace agent invoke squadboard check_in  --input '{"agent_id":"…","summary":"Adding the toggle","files":["src/settings/Toggle.tsx"]}' --json`}
             </pre>
             <p className="mt-6 text-sm text-muted-foreground">
               Try it without connecting anything: run the built-in demo agents on a plan and steer them from the board. AI features (planning, the assistant) use your own DeepSpace credits.
             </p>
             <Link to="/teams" className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90">
-              Open Conductor
+              Open Squadboard
             </Link>
           </div>
         </section>
 
-        <footer className="border-t border-border py-8 text-center text-xs text-muted-foreground">Conductor · built on DeepSpace</footer>
+        <footer className="border-t border-border py-8 text-center text-xs text-muted-foreground">Squadboard · built on DeepSpace</footer>
       </div>
     </>
   )

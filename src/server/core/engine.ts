@@ -1,5 +1,5 @@
 /**
- * Conductor's coordination engine — pure functions only (no I/O), so every
+ * Squadboard's coordination engine — pure functions only (no I/O), so every
  * rule here is unit-tested in engine.test.ts.
  *
  * Model (decision #6 in docs/DECISIONS.md): there are no locks. Agents may

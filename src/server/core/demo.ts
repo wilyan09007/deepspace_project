@@ -88,7 +88,7 @@ export async function finishDemo(ops: Ops, payload: DemoPayload, reason: string)
   if (goal) {
     await ops.store.update<Goal>('goals', goal.recordId, { demoState: 'stopped' })
     await ops.recomputeOverlaps(goal.data.teamId, goal.data.projectId)
-    await ops.log({ teamId: goal.data.teamId, projectId: goal.data.projectId, kind: 'demo', message: `demo run ended: ${reason}`, actorName: 'Conductor' })
+    await ops.log({ teamId: goal.data.teamId, projectId: goal.data.projectId, kind: 'demo', message: `demo run ended: ${reason}`, actorName: 'Squadboard' })
   }
 }
 

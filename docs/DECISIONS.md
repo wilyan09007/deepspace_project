@@ -30,6 +30,7 @@ Open items at the bottom are waiting on the owner.
 | 20 | **Private repos** work for users who connect GitHub (all reads use their own connection); without a connection, public repos only as before | Agent, following #19 | The test repo `wilyan09007/deepspace_project` is private |
 | 21 | Build: needs-you inbox, review gate, task handoff history, merge alerts, auto-release of tasks held by agents offline 2+ hours | Owner | 2026-11-25. Not now: manual task control, branch conventions, human-PR overlap |
 | 22 | GitHub sync runs when a member acts (plans a goal, opens the board, clicks Sync), billed to them; nothing syncs on a schedule (that would bill the owner, decision #11) | Agent, following #11 | Status labels on GitHub can lag until someone opens the board |
+| 23 | **Renamed Conductor → Squadboard** (`squadboard.app.space`). "Conductor" clashes with a well-known YC-backed app for parallel Claude Code agents; "Pitwall" was rejected as too random; plain names (AgentBoard, AgentsRoom, CodeCrew, Standup…) belong to existing agent tools | Owner | 2026-11-24. GitHub labels/PR lines now say `squadboard`; old `conductor` markers are still read |
 
 ## Open — waiting on the owner
 

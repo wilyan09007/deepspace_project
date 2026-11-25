@@ -104,7 +104,7 @@ export default function TeamPage() {
                   <button type="button" className="text-primary hover:underline" onClick={connectGithub} data-testid="team-reconnect-github">
                     Reconnect GitHub
                   </button>{' '}
-                  to change which repositories Conductor can use. Checking the repo uses a tiny amount of your DeepSpace credits.
+                  to change which repositories Squadboard can use. Checking the repo uses a tiny amount of your DeepSpace credits.
                 </>
               ) : (
                 <>
@@ -112,7 +112,7 @@ export default function TeamPage() {
                   <button type="button" className="text-primary hover:underline" onClick={connectGithub} data-testid="team-connect-github">
                     connect your GitHub account
                   </button>{' '}
-                  for private ones (Conductor then reads and writes GitHub as you). Checking the repo uses a tiny amount of your DeepSpace credits.
+                  for private ones (Squadboard then reads and writes GitHub as you). Checking the repo uses a tiny amount of your DeepSpace credits.
                 </>
               )}
             </p>

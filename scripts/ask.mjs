@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Ask the live Conductor assistant one question as the developer signed in
+ * Ask the live Squadboard assistant one question as the developer signed in
  * with the DeepSpace CLI (billed to them). Run `npx deepspace auth whoami` first.
  *
- *   node scripts/ask.mjs "What is each agent doing?" [--url https://conductor.app.space] [--model claude-sonnet-5-5]
+ *   node scripts/ask.mjs "What is each agent doing?" [--url https://squadboard.app.space] [--model claude-sonnet-5-5]
  */
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -18,7 +18,7 @@ if (!question) {
   console.error('Usage: node scripts/ask.mjs "your question"')
   process.exit(2)
 }
-const url = opt('url', 'https://conductor.app.space')
+const url = opt('url', 'https://squadboard.app.space')
 const raw = readFileSync(`${homedir()}/.deepspace/token`, 'utf8').trim()
 let token = raw
 try {

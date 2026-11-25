@@ -159,7 +159,7 @@ export default function BoardPage() {
         <div className="mt-6 rounded-xl border border-dashed border-border p-10 text-center">
           <p className="font-medium">No goals yet</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-            Describe what you want built. Conductor reads the repo and splits it into tasks with the files each will touch, so agents can work in parallel without colliding.
+            Describe what you want built. Squadboard reads the repo and splits it into tasks with the files each will touch, so agents can work in parallel without colliding.
           </p>
           <Button className="mt-4" onClick={() => setNewGoalOpen(true)}><Plus /> New goal</Button>
         </div>
@@ -310,7 +310,7 @@ function NewGoalModal({ open, onClose, onSubmit }: { open: boolean; onClose: () 
       <form onSubmit={submit}>
         <Modal.Header>
           <Modal.Title>New goal</Modal.Title>
-          <Modal.Description>Conductor reads the repository and plans your instructions into tasks for agents. Planning uses your own DeepSpace credits (one Claude call plus a few GitHub reads).</Modal.Description>
+          <Modal.Description>Squadboard reads the repository and plans your instructions into tasks for agents. Planning uses your own DeepSpace credits (one Claude call plus a few GitHub reads).</Modal.Description>
         </Modal.Header>
         <Modal.Body className="space-y-4">
           <div className="space-y-1.5">

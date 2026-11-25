@@ -1,6 +1,6 @@
 /**
- * Conductor's agent tools — what a developer's local coding agent (Claude
- * Code, Codex, …) calls through `npx deepspace agent invoke conductor <tool>`.
+ * Squadboard's agent tools — what a developer's local coding agent (Claude
+ * Code, Codex, …) calls through `npx deepspace agent invoke squadboard <tool>`.
  *
  * Each tool is a thin wrapper over src/server/core/ops.ts, which checks the
  * caller is in the team and owns the agent. The CLI's agent token identifies
@@ -26,7 +26,7 @@ async function run<T>(context: AgentToolContext<Env>, fn: (ops: Ops) => Promise<
   } catch (e) {
     if (e instanceof OpsError) throw new AgentToolError(e.code, e.message, e.status)
     console.error(`[agent-tool] ${e instanceof Error ? e.stack ?? e.message : String(e)}`)
-    throw new AgentToolError('internal', 'Conductor hit an error; try again in a moment.', 500)
+    throw new AgentToolError('internal', 'Squadboard hit an error; try again in a moment.', 500)
   }
 }
 
@@ -35,7 +35,7 @@ export const AGENT_LOOP = `Loop: register_agent once → next_task → do the ta
 export function buildAgentTools(context: AgentToolContext<Env>): ToolSet {
   return {
     list_projects: tool({
-      description: 'List the Conductor projects (GitHub repos) in the teams you belong to, with their project ids.',
+      description: 'List the Squadboard projects (GitHub repos) in the teams you belong to, with their project ids.',
       inputSchema: z.object({}),
       execute: () => run(context, (ops) => ops.myProjects()),
     }),
@@ -53,7 +53,7 @@ export function buildAgentTools(context: AgentToolContext<Env>): ToolSet {
         }),
     }),
     next_task: tool({
-      description: 'Get your task. Returns your current task if you have one, otherwise assigns the ready task that overlaps least with other agents. Also returns directives from humans, overlap warnings, the task\'s GitHub issue, how to word your PR so Conductor links it, and — if someone worked on it before or a reviewer sent it back — that history.',
+      description: 'Get your task. Returns your current task if you have one, otherwise assigns the ready task that overlaps least with other agents. Also returns directives from humans, overlap warnings, the task\'s GitHub issue, how to word your PR so Squadboard links it, and — if someone worked on it before or a reviewer sent it back — that history.',
       inputSchema: z.object({ agent_id: agentId }),
       execute: ({ agent_id }) => run(context, (ops) => ops.nextTask(agent_id)),
     }),
@@ -68,7 +68,7 @@ export function buildAgentTools(context: AgentToolContext<Env>): ToolSet {
       execute: ({ agent_id, status, summary, files }) => run(context, (ops) => ops.checkIn(agent_id, { status, summary, files })),
     }),
     ask_human: tool({
-      description: 'Ask the team a question. It appears on the Conductor board; the answer comes back in a later check_in. Keep working on other parts meanwhile, or check_in with status "blocked".',
+      description: 'Ask the team a question. It appears on the Squadboard board; the answer comes back in a later check_in. Keep working on other parts meanwhile, or check_in with status "blocked".',
       inputSchema: z.object({ agent_id: agentId, question: z.string().min(1).max(1000) }),
       execute: ({ agent_id, question }) => run(context, (ops) => ops.askHuman(agent_id, question)),
     }),

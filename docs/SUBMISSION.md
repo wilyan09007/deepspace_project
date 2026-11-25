@@ -4,13 +4,13 @@ Copy what the form asks for. Fill in anything marked **[you]**.
 
 ## Name and one-liner
 
-**Conductor** (see "Name" below before submitting)
+**Squadboard**
 
 > A shared, live control room for teams whose developers each run their own AI coding agent on the same repo: it splits work so agents don't collide, warns when they do, and lets anyone on the team steer anyone's agent.
 
 ## Links
 
-- Live app: https://conductor.app.space
+- Live app: https://squadboard.app.space
 - Code: https://github.com/wilyan09007/deepspace_project — **[you]** make it public and put this work on the default branch first (see checklist)
 - Docs in the repo: `README.md` (what/how/billing/guardrails), `docs/TESTING.md`, `docs/DECISIONS.md` (every product decision and who made it), `docs/BUILD_NOTES.md` (the build plan as it evolved)
 
@@ -20,7 +20,7 @@ AI coding agents are now good enough that every developer on a team runs one, of
 
 ## What it does
 
-1. **Plan:** describe a goal; Conductor reads the GitHub repo and splits it into tasks, each with the files it will likely touch and what it depends on.
+1. **Plan:** describe a goal; Squadboard reads the GitHub repo and splits it into tasks, each with the files it will likely touch and what it depends on.
 2. **Hand out work so agents stay apart:** each developer's agent (Claude Code, Codex, anything that runs a command) asks for a task and gets the one that overlaps least with what everyone else's agents are doing.
 3. **Warn, don't block:** when two agents end up in the same file, or in files that import each other, both agents and the whole team are told who else is there and what they're doing.
 4. **Steer anyone's agent:** pause, resume, take a task back, send a note, answer an agent's question. The agent gets it on its next check-in.
@@ -43,7 +43,7 @@ AI coding agents are now good enough that every developer on a team runs one, of
 
 ## How to try it (2 minutes, free)
 
-1. Open https://conductor.app.space → **Open the app** → sign in.
+1. Open https://squadboard.app.space → **Open the app** → sign in.
 2. **New team** → create one.
 3. On the team page, click **Load sample** (a plan captured from a real planner run).
 4. Click **Run demo agents**. Three scripted agents take tasks, check in, collide in one file, and ask a question.
@@ -57,12 +57,11 @@ I made the product decisions; Claude Code built it. Every decision is in `docs/D
 
 ## Name
 
-"Conductor" is also the name of a well-known YC-backed Mac app (Melty Labs, conductor.build) that runs several Claude Code agents in parallel for one developer. **[you]** Keep the name and acknowledge the clash, or rename before submitting (a DeepSpace rename moves the URL; data stays).
+**Squadboard**, renamed from "Conductor", which is also the name of a well-known YC-backed Mac app for running Claude Code agents in parallel. The repo's history and `docs/DECISIONS.md` still say Conductor in places; that's the same app.
 
 ## Pre-submission checklist
 
 - [ ] **[you]** Make the GitHub repo public (decision #10).
 - [ ] **[you]** Put this work on the default branch. The repo's default is currently `claude/eloquent-ptolemy-w86k06`, which has only the early work; everything is on `claude/awesome-hypatia-2rmia9`. Merge a PR, or change the default branch in GitHub settings.
-- [ ] **[you]** Decide on the name (above).
 - [ ] Optional: delete the leftover test branch `conductor-test/pr-link`. Test issues #1–#2 and PR #3 on the repo are real examples of the GitHub sync; keep or close them.
 - [ ] Optional: refresh the README screenshots (they predate the Review column, GitHub panel and Inbox).

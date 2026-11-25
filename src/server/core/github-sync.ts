@@ -2,9 +2,9 @@
  * Two-way GitHub sync for a project (decision #19).
  *
  * Out: each task is mirrored as an issue — labelled `conductor` plus its
- * status, with a footer Conductor reads back — and closed when the task is
+ * status, with a footer Squadboard reads back — and closed when the task is
  * done. In: open issues and PRs are listed on the board; PRs are linked to
- * tasks by `Conductor-Task: <id>` or `Closes #<issue>`; a merged PR approves
+ * tasks by `Squadboard-Task: <id>` or `Closes #<issue>`; a merged PR approves
  * its task (and triggers merge alerts); closing a mirrored issue on GitHub
  * marks the task done.
  *
@@ -27,27 +27,30 @@ export const STATUS_TEXT: Record<TaskStatus, string> = {
   review: 'Review',
   done: 'Done',
 }
-export const BASE_LABEL = 'conductor'
-export const statusLabel = (s: TaskStatus) => `conductor: ${STATUS_TEXT[s].toLowerCase()}`
+export const BASE_LABEL = 'squadboard'
+/** Label/marker prefixes this app has used (it was called Conductor before). */
+const OUR_LABEL_PREFIXES = ['squadboard', 'conductor']
+export const statusLabel = (s: TaskStatus) => `squadboard: ${STATUS_TEXT[s].toLowerCase()}`
 const LABELS: Array<[string, string, string]> = [
-  [BASE_LABEL, 'f2b134', 'Managed by Conductor'],
-  ['conductor: ready', 'c5cfdb', 'Conductor: waiting for an agent'],
-  ['conductor: in progress', '3fc7c0', 'Conductor: an agent is working on it'],
-  ['conductor: blocked', 'f06464', 'Conductor: blocked'],
-  ['conductor: paused', 'f2b134', 'Conductor: paused by a teammate'],
-  ['conductor: review', 'a78bfa', 'Conductor: waiting for human review'],
-  ['conductor: done', '4ade80', 'Conductor: done'],
+  [BASE_LABEL, 'f2b134', 'Managed by Squadboard'],
+  ['squadboard: ready', 'c5cfdb', 'Squadboard: waiting for an agent'],
+  ['squadboard: in progress', '3fc7c0', 'Squadboard: an agent is working on it'],
+  ['squadboard: blocked', 'f06464', 'Squadboard: blocked'],
+  ['squadboard: paused', 'f2b134', 'Squadboard: paused by a teammate'],
+  ['squadboard: review', 'a78bfa', 'Squadboard: waiting for human review'],
+  ['squadboard: done', '4ade80', 'Squadboard: done'],
 ]
 
 // ── Formats (written to GitHub, read back) ─────────────────────────────────
 
-const MARKER = /<!--\s*conductor:task=([A-Za-z0-9_-]+)\s*-->/
+// Reads markers written under the old name too.
+const MARKER = /<!--\s*(?:squadboard|conductor):task=([A-Za-z0-9_-]+)\s*-->/
 
 export function boardUrl(appUrl: string, task: Pick<Task, 'teamId' | 'projectId'>, taskId: string): string {
   return `${appUrl}/t/${task.teamId}/p/${task.projectId}?task=${encodeURIComponent(taskId)}`
 }
 
-/** Issue body for a task. The footer's last lines are what Conductor reads back. */
+/** Issue body for a task. The footer's last lines are what Squadboard reads back. */
 export function issueBody(
   taskId: string,
   task: Task,
@@ -62,9 +65,9 @@ export function issueBody(
   lines.push(
     '',
     '---',
-    `Conductor status: ${STATUS_TEXT[task.status]}`,
-    `[Open in Conductor](${boardUrl(ctx.appUrl, task, taskId)}) · PRs for this task should include \`Closes #<this issue>\` and \`Conductor-Task: ${taskId}\``,
-    `<!-- conductor:task=${taskId} -->`,
+    `Squadboard status: ${STATUS_TEXT[task.status]}`,
+    `[Open in Squadboard](${boardUrl(ctx.appUrl, task, taskId)}) · PRs for this task should include \`Closes #<this issue>\` and \`Squadboard-Task: ${taskId}\``,
+    `<!-- squadboard:task=${taskId} -->`,
   )
   return lines.join('\n')
 }
@@ -75,7 +78,7 @@ export function parseTaskMarker(body: string): string | null {
 
 /** Task ids and issue numbers a PR description links to. */
 export function parsePrLinks(body: string): { taskIds: string[]; closes: number[] } {
-  const taskIds = [...body.matchAll(/Conductor-Task:\s*([A-Za-z0-9_-]+)/gi)].map((m) => m[1]!)
+  const taskIds = [...body.matchAll(/(?:Squadboard|Conductor)-Task:\s*([A-Za-z0-9_-]+)/gi)].map((m) => m[1]!)
   const closes = [...body.matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/gi)].map((m) => Number(m[1]))
   return { taskIds: [...new Set(taskIds)], closes: [...new Set(closes)] }
 }
@@ -124,7 +127,7 @@ export async function setMirroring(ops: Ops, projectId: string, gh: GitHubWriter
   const { repoOwner: owner, repoName: repo } = project.data
   const perm = await gh.permission(owner, repo).catch(notConnected)
   if (perm !== 'admin' && perm !== 'write') {
-    throw new OpsError('no_push_access', `Your GitHub account can't write to ${owner}/${repo}, so Conductor can't create issues there as you.`, 403)
+    throw new OpsError('no_push_access', `Your GitHub account can't write to ${owner}/${repo}, so Squadboard can't create issues there as you.`, 403)
   }
   for (const [name, color, description] of LABELS) await gh.ensureLabel(owner, repo, name, color, description)
   await ops.store.update<Project>('projects', projectId, { mirrorIssues: 1, mirrorBy: await ops.userName() })
@@ -217,7 +220,7 @@ export async function syncProject(ops: Ops, projectId: string, gh: GitHubWriter,
           continue
         }
         if (task.data.ghStatus === task.data.status) continue
-        const others = (issueLabels.get(task.data.issueNumber) ?? []).filter((l) => !l.startsWith('conductor'))
+        const others = (issueLabels.get(task.data.issueNumber) ?? []).filter((l) => !OUR_LABEL_PREFIXES.some((p) => l.startsWith(p)))
         await gh.updateIssue(owner, repo, task.data.issueNumber, {
           body: issueBody(task.recordId, task.data, ctx),
           labels: [...others, BASE_LABEL, statusLabel(task.data.status)],
@@ -308,6 +311,6 @@ export async function commentPlanOnIssue(ops: Ops, goalId: string, gh: GitHubWri
     project.data.repoOwner,
     project.data.repoName,
     goal.data.sourceIssueNumber,
-    [`Conductor planned this into ${tasks.length} task(s):`, '', ...lines, '', `[Open the board](${link})`].join('\n'),
+    [`Squadboard planned this into ${tasks.length} task(s):`, '', ...lines, '', `[Open the board](${link})`].join('\n'),
   )
 }

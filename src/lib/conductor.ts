@@ -1,5 +1,5 @@
 /**
- * Display helpers for Conductor records. Row shapes come from the server's
+ * Display helpers for Squadboard records. Row shapes come from the server's
  * ops.ts (type-only import — no server code reaches the browser).
  */
 

@@ -1,5 +1,5 @@
 /**
- * Conductor collections.
+ * Squadboard collections.
  *
  * Access model: every team-owned row carries `teamId` and uses the SDK's
  * built-in `'team'` permission level, which resolves membership against the

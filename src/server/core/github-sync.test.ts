@@ -48,7 +48,7 @@ class FakeGitHub implements GitHubWriter {
 let db: FakeTools
 let gh: FakeGitHub
 let clock: number
-const APP = 'https://conductor.app.space'
+const APP = 'https://squadboard.app.space'
 const ops = (u: string) => new Ops({ store: new Store(db.as(u)), userId: u, now: () => clock })
 
 async function seed() {
@@ -72,21 +72,24 @@ beforeEach(() => {
 })
 
 describe('GitHub formats', () => {
-  it('writes a footer Conductor can read back', () => {
+  it('writes a footer Squadboard can read back', () => {
     const body = issueBody('tas_7', { teamId: 't', projectId: 'p', goalId: 'g', title: 'X', body: 'Do X', acceptance: 'X works', predictedFiles: ['a.ts'], order: 0, status: 'in_progress' }, { goalTitle: 'Goal', dependsOnIssues: [3], sourceIssue: 1, appUrl: APP })
     expect(body).toContain('**Done when:** X works')
     expect(body).toContain('**Depends on:** #3')
     expect(body).toContain('**Goal:** Goal (from #1)')
-    expect(body).toContain('Conductor status: In progress')
+    expect(body).toContain('Squadboard status: In progress')
     expect(body).toContain(`${APP}/t/t/p/p?task=tas_7`)
     expect(parseTaskMarker(body)).toBe('tas_7')
     expect(parseTaskMarker('no marker')).toBeNull()
   })
 
   it('reads task links from a PR description', () => {
-    expect(parsePrLinks('Adds the toggle.\n\nCloses #12, fixes #3\nConductor-Task: tas_9')).toEqual({ taskIds: ['tas_9'], closes: [12, 3] })
+    expect(parsePrLinks('Adds the toggle.\n\nCloses #12, fixes #3\nSquadboard-Task: tas_9')).toEqual({ taskIds: ['tas_9'], closes: [12, 3] })
     expect(parsePrLinks('resolves #4 and Resolved #5')).toEqual({ taskIds: [], closes: [4, 5] })
     expect(parsePrLinks('Mentions #8 only')).toEqual({ taskIds: [], closes: [] })
+    // Written under the app's old name (Conductor): still understood.
+    expect(parsePrLinks('Conductor-Task: tas_1')).toEqual({ taskIds: ['tas_1'], closes: [] })
+    expect(parseTaskMarker('<!-- conductor:task=tas_2 -->')).toBe('tas_2')
   })
 })
 
@@ -105,11 +108,11 @@ describe('mirroring', () => {
     const { projectId, taskIds } = await seed()
     const r = await setMirroring(ops('alice'), projectId, gh, true, APP)
     expect(r).toMatchObject({ created: 3 })
-    expect(gh.labels).toContain('conductor: review')
+    expect(gh.labels).toContain('squadboard: review')
     expect(gh.issues.map((i) => [i.title, i.labels])).toEqual([
-      ['Theme', ['conductor', 'conductor: ready']],
-      ['Toggle', ['conductor', 'conductor: ready']],
-      ['Wire', ['conductor', 'conductor: ready']],
+      ['Theme', ['squadboard', 'squadboard: ready']],
+      ['Toggle', ['squadboard', 'squadboard: ready']],
+      ['Wire', ['squadboard', 'squadboard: ready']],
     ])
     expect(gh.issues[2]!.body).toContain('**Depends on:** #1')
     expect(db.rows.get(taskIds[0]!)!.data).toMatchObject({ issueNumber: 1, ghStatus: 'ready' })
@@ -122,8 +125,8 @@ describe('mirroring', () => {
     gh.issues[0]!.labels.push('frontend')
     clock += 3 * 60_000
     expect(await syncProject(ops('alice'), projectId, gh, APP)).toMatchObject({ created: 0, updated: 1 })
-    expect(gh.issues[0]!.labels).toEqual(['frontend', 'conductor', 'conductor: in progress'])
-    expect(gh.issues[0]!.body).toContain('Conductor status: In progress')
+    expect(gh.issues[0]!.labels).toEqual(['frontend', 'squadboard', 'squadboard: in progress'])
+    expect(gh.issues[0]!.body).toContain('Squadboard status: In progress')
 
     // Nothing changed → no GitHub writes; and syncs within 2 minutes are skipped.
     gh.calls = []
@@ -135,7 +138,7 @@ describe('mirroring', () => {
 })
 
 describe('reading GitHub back', () => {
-  it('links PRs by Closes #N or Conductor-Task, approves on merge, and alerts overlapping agents', async () => {
+  it('links PRs by Closes #N or Squadboard-Task, approves on merge, and alerts overlapping agents', async () => {
     const { projectId, taskIds } = await seed()
     await setMirroring(ops('alice'), projectId, gh, true, APP)
     const a1 = (await ops('alice').registerAgent(projectId, 'a1')).agentId
@@ -146,7 +149,7 @@ describe('reading GitHub back', () => {
     await ops('alice').completeTask(a1, { summary: 'done' })
 
     gh.pulls.push({ number: 10, title: 'Theme tokens', body: 'Closes #1', url: 'https://github.com/acme/web/pull/10', state: 'open', merged: false, labels: [], author: 'alice-gh', updatedAt: 'p1' })
-    gh.pulls.push({ number: 11, title: 'Toggle', body: 'wip\nConductor-Task: ' + taskIds[1], url: 'https://github.com/acme/web/pull/11', state: 'open', merged: false, labels: [], author: 'bob-gh', updatedAt: 'p2' })
+    gh.pulls.push({ number: 11, title: 'Toggle', body: 'wip\nSquadboard-Task: ' + taskIds[1], url: 'https://github.com/acme/web/pull/11', state: 'open', merged: false, labels: [], author: 'bob-gh', updatedAt: 'p2' })
     gh.pulls.push({ number: 12, title: 'Unrelated', body: 'typo', url: 'https://github.com/acme/web/pull/12', state: 'open', merged: false, labels: [], author: 'carol', updatedAt: 'p3' })
     clock += 3 * 60_000
     const r = await syncProject(ops('bob'), projectId, gh, APP)
@@ -164,7 +167,7 @@ describe('reading GitHub back', () => {
     await syncProject(ops('bob'), projectId, gh, APP)
     expect(db.rows.get(taskIds[0]!)!.data.status).toBe('done')
     expect(gh.issues[0]!.state).toBe('closed')
-    expect(gh.issues[0]!.labels).toContain('conductor: done')
+    expect(gh.issues[0]!.labels).toContain('squadboard: done')
     const notes = (await ops('bob').checkIn(b1, {})).directives
     expect(notes.some((d) => d.text.includes('was merged') && d.text.includes('src/theme.ts'))).toBe(true)
     // Merged/closed PRs drop off the open list.

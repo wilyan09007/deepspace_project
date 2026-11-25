@@ -13,7 +13,7 @@ export async function seedDevRepoProject(ops: Ops, teamId: string): Promise<{ pr
   await ops.requireMember(teamId)
   const projectId = await ops.store.create<Project>('projects', {
     teamId,
-    repoOwner: 'conductor-fixtures',
+    repoOwner: 'squadboard-fixtures',
     repoName: 'plan-me',
     defaultBranch: 'main',
     description: 'Dev-only test fixture (not a real repository).',
@@ -26,7 +26,7 @@ export async function seedDevFixture(ops: Ops, teamId: string): Promise<{ projec
   await ops.requireMember(teamId)
   const projectId = await ops.store.create<Project>('projects', {
     teamId,
-    repoOwner: 'conductor-fixtures',
+    repoOwner: 'squadboard-fixtures',
     repoName: 'demo-app',
     defaultBranch: 'main',
     description: 'Dev-only test fixture (not a real repository or plan).',

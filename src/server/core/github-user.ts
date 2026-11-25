@@ -15,7 +15,7 @@ import { callIntegration } from './integration'
 
 export class GithubNotConnected extends Error {
   constructor() {
-    super('Connect your GitHub account to Conductor first')
+    super('Connect your GitHub account to Squadboard first')
   }
 }
 

@@ -24,7 +24,7 @@
 declare const __DEEPSPACE_SITE_ORIGIN__: string | undefined
 
 export const seo = {
-  title: 'Conductor | Mission control for teams running AI coding agents',
+  title: 'Squadboard | Mission control for teams running AI coding agents',
   description: 'Plan a goal into parallel tasks, see which agents are touching the same files, and pause, redirect or answer any teammate’s coding agent from one live board.',
   /** Public origin for canonical URLs, og:url, and the sitemap — no trailing
    *  slash. Replace with the custom domain once one is attached, e.g.

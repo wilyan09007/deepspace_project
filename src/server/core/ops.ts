@@ -1,5 +1,5 @@
 /**
- * Conductor operations — the only code that writes Conductor data.
+ * Squadboard operations — the only code that writes Squadboard data.
  *
  * Called from server actions (UI), agent tools (local agents via the CLI),
  * the demo job and cron. The store underneath runs RBAC-off, so this file is
@@ -237,11 +237,11 @@ const CHECKIN_TO_TASK: Record<string, TaskStatus> = {
   review: 'in_progress',
 }
 
-/** What a PR description must contain so Conductor links it to the task (decision #19). */
+/** What a PR description must contain so Squadboard links it to the task (decision #19). */
 export function prInstructions(taskId: string, issueNumber?: number | null): string {
   return issueNumber
-    ? `In your pull request description include the lines "Closes #${issueNumber}" and "Conductor-Task: ${taskId}".`
-    : `In your pull request description include the line "Conductor-Task: ${taskId}".`
+    ? `In your pull request description include the lines "Closes #${issueNumber}" and "Squadboard-Task: ${taskId}".`
+    : `In your pull request description include the line "Squadboard-Task: ${taskId}".`
 }
 
 export interface HistoryItem {
@@ -525,7 +525,7 @@ export class Ops {
     if (!repo) return value
     const matches = (await this.myProjects()).filter((p) => p.repo.toLowerCase() === `${repo.owner}/${repo.repo}`.toLowerCase())
     if (matches.length === 1) return matches[0]!.projectId
-    if (!matches.length) throw new OpsError('not_found', `None of your teams has a project for ${value}. Add it on the Conductor board first.`, 404)
+    if (!matches.length) throw new OpsError('not_found', `None of your teams has a project for ${value}. Add it on the Squadboard board first.`, 404)
     throw new OpsError('ambiguous', `${value} is a project in several of your teams; pass the project id instead (see list_projects).`, 409)
   }
 
@@ -900,7 +900,7 @@ export class Ops {
    */
   async onPrMerged(taskId: string): Promise<{ alerted: string[] }> {
     const task = await this.loadForMember<Task>('tasks', taskId, 'Task')
-    if (task.data.status !== 'done') await this.markDone(task, 'Conductor', `PR merged for “${task.data.title}”`)
+    if (task.data.status !== 'done') await this.markDone(task, 'Squadboard', `PR merged for “${task.data.title}”`)
     if (task.data.mergeAlerted) return { alerted: [] }
     const files = new Set([...(task.data.predictedFiles ?? []), ...(task.data.touchedFiles ?? [])])
     const edges = await this.projectEdges(task.data.projectId)
@@ -920,14 +920,14 @@ export class Ops {
         text: clip(`“${task.data.title}” was merged and changed ${shared.length ? shared.join(', ') : 'files next to yours (' + near.join(', ') + ')'}. Pull the latest default branch and rebase before you continue.`, MAX_SUMMARY),
         targetTaskId: other.recordId,
         createdBy: this.userId,
-        createdByName: 'Conductor',
+        createdByName: 'Squadboard',
         deliveredAt: null,
       })
       alerted.push(agent.data.name)
     }
     await this.store.update<Task>('tasks', taskId, { mergeAlerted: 1 })
     if (alerted.length) {
-      await this.log({ teamId: task.data.teamId, projectId: task.data.projectId, taskId, kind: 'github', message: `merge alert: told ${alerted.join(', ')} to pull “${task.data.title}”`, actorName: 'Conductor' })
+      await this.log({ teamId: task.data.teamId, projectId: task.data.projectId, taskId, kind: 'github', message: `merge alert: told ${alerted.join(', ')} to pull “${task.data.title}”`, actorName: 'Squadboard' })
     }
     return { alerted }
   }
@@ -950,7 +950,7 @@ export class Ops {
       if (!row) {
         const created = await this.store.tryCreate<OverlapRow>('overlaps', { teamId, projectId, key: o.key, taskA: o.taskA, taskB: o.taskB, files: o.files, kind: o.kind, status: 'open' })
         if (created) {
-          await this.log({ teamId, projectId, kind: 'overlap', message: `overlap (${o.kind}): “${titles.get(o.taskA)}” and “${titles.get(o.taskB)}”`, files: o.kind === 'same-file' ? o.files : undefined, actorName: 'Conductor' })
+          await this.log({ teamId, projectId, kind: 'overlap', message: `overlap (${o.kind}): “${titles.get(o.taskA)}” and “${titles.get(o.taskB)}”`, files: o.kind === 'same-file' ? o.files : undefined, actorName: 'Squadboard' })
         }
         continue
       }
@@ -1134,10 +1134,10 @@ export async function sweepStaleAgents(ops: Ops, now: number, staleMs: number, r
             text: `You were offline for ${hours}+ hours, so “${task.data.title}” went back to Ready for others. Call next_task when you're back.`,
             targetTaskId: task.recordId,
             createdBy: ops.userId,
-            createdByName: 'Conductor',
+            createdByName: 'Squadboard',
             deliveredAt: null,
           })
-          await ops.log({ teamId: a.data.teamId, projectId: a.data.projectId, agentId: a.recordId, taskId: task.recordId, kind: 'agent', message: `released “${task.data.title}” from ${a.data.name} after ${hours}+ hours offline`, actorName: 'Conductor' })
+          await ops.log({ teamId: a.data.teamId, projectId: a.data.projectId, agentId: a.recordId, taskId: task.recordId, kind: 'agent', message: `released “${task.data.title}” from ${a.data.name} after ${hours}+ hours offline`, actorName: 'Squadboard' })
           await ops.recomputeOverlaps(a.data.teamId, a.data.projectId)
           released++
         }

@@ -20,7 +20,7 @@ export const THEMES = [
   {
     id: 'console',
     label: 'Console',
-    description: "Conductor's control-room theme: ink blue with an amber signal.",
+    description: "Squadboard's control-room theme: ink blue with an amber signal.",
   },
   {
     id: 'slate',

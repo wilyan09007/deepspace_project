@@ -120,7 +120,7 @@ export async function emailDigestToSelf(
     `<pre style="font-family:inherit;white-space:pre-wrap">${escapeHtml(lines.slice(1).join('\n').trim())}</pre>`,
     `<p><a href="${link}">Open the board</a></p>`,
   ].join('\n')
-  await send({ to: ownEmail, subject: `Conductor digest — ${teamName}, ${digest.data.date}`, text: `${digest.data.body}\n\nOpen the board: ${link}`, html })
+  await send({ to: ownEmail, subject: `Squadboard digest — ${teamName}, ${digest.data.date}`, text: `${digest.data.body}\n\nOpen the board: ${link}`, html })
   const sentTo = [...new Set([...(digest.data.sentTo ?? []), ops.userId])]
   await ops.store.update<Digest>('digests', digestId, { sentTo })
   return { sentTo: ownEmail }

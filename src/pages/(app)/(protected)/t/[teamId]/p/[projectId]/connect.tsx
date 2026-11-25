@@ -8,9 +8,9 @@ import type { Project, Team } from '@/lib/conductor'
 
 function agentInstructions(projectId: string, repo: string): string {
   const cmd = (tool: string, input: string) => `npx deepspace agent invoke ${APP_NAME} ${tool} --input '${input}' --json`
-  return `## Working with Conductor
+  return `## Working with Squadboard
 
-This repository (${repo}) is coordinated with Conductor so several AI agents can work on it at once without colliding. Use these commands; they run as the developer signed in with \`npx deepspace auth login\`.
+This repository (${repo}) is coordinated with Squadboard so several AI agents can work on it at once without colliding. Use these commands; they run as the developer signed in with \`npx deepspace auth login\`.
 
 1. Once per session, register (pick a short name for yourself):
    ${cmd('register_agent', `{"project":"${projectId}","name":"claude-1"}`)}
@@ -22,7 +22,7 @@ This repository (${repo}) is coordinated with Conductor so several AI agents can
 4. If you need a human decision:
    ${cmd('ask_human', '{"agent_id":"AGENT_ID","question":"..."}')}
 5. Open a pull request. Its description must include the lines next_task gave you in "prInstructions":
-   "Closes #<issue>" (when the task has a GitHub issue) and "Conductor-Task: <task id>". That links the PR to the task.
+   "Closes #<issue>" (when the task has a GitHub issue) and "Squadboard-Task: <task id>". That links the PR to the task.
 6. Submit the task for review (include the PR link only if you opened one):
    ${cmd('complete_task', '{"agent_id":"AGENT_ID","summary":"what changed","pr_url":"https://github.com/OWNER/REPO/pull/N"}')}
    A teammate approves it (or merging the PR does), or sends it back with notes. Then go back to step 2.
@@ -54,7 +54,7 @@ export default function ConnectPage() {
       <Crumbs items={[{ label: 'Teams', to: '/teams' }, { label: teams[0]?.data.name ?? 'Team', to: `/t/${teamId}` }, { label: repo, to: `/t/${teamId}/p/${projectId}` }, { label: 'Connect an agent' }]} />
       <h1 className="text-2xl font-semibold tracking-tight">Connect a coding agent</h1>
       <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-        Claude Code, Codex or any agent that can run shell commands can join this board. It talks to Conductor through the DeepSpace CLI, signed in as you, so it can only see your teams.
+        Claude Code, Codex or any agent that can run shell commands can join this board. It talks to Squadboard through the DeepSpace CLI, signed in as you, so it can only see your teams.
       </p>
 
       <ol className="mt-6 space-y-4">
@@ -79,7 +79,7 @@ export default function ConnectPage() {
         <li>
           <Panel title="3. Start your agent">
             <p className="text-sm">
-              Ask it to "pick up a task from Conductor". It registers, takes the task that overlaps least with what others are doing, and shows up on the{' '}
+              Ask it to "pick up a task from Squadboard". It registers, takes the task that overlaps least with what others are doing, and shows up on the{' '}
               <Link to={`/t/${teamId}/p/${projectId}`} className="text-primary hover:underline">board</Link>.
             </p>
             <p className="mt-2 text-xs text-muted-foreground">

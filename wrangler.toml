@@ -1,4 +1,4 @@
-name = "conductor"
+name = "squadboard"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat", "assets_navigation_has_no_effect"]
 main = "worker.ts"
@@ -28,7 +28,7 @@ run_worker_first = ["/api/*", "/ws/*", "/internal/*", "/v1/*", "/_deepspace/*", 
 # secrets, and collaborators all key to it. Renames are safe.
 [vars]
 DEEPSPACE_APP_ID = "app_01M8832W6C974BDDJ39RHF79Q4"
-APP_NAME = "conductor"
+APP_NAME = "squadboard"
 # Exact comma-separated native callback URIs. Set this before deploying an
 # Expo client, for example: "myapp://auth/callback".
 NATIVE_AUTH_REDIRECT_URIS = ""

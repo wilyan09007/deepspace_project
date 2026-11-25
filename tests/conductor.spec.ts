@@ -1,5 +1,5 @@
 /**
- * Conductor end-to-end: three real signed-in users against the local app.
+ * Squadboard end-to-end: three real signed-in users against the local app.
  *
  * Alice creates a team and invites Bob; Eve is an outsider. The board uses the
  * dev-only fixture plan (no planner call, no credits), and the demo agents

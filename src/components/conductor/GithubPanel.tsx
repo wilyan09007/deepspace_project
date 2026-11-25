@@ -86,7 +86,7 @@ export function GithubPanel({ project, tasks, run, act, pending, onOpenTask }: {
       ) : !connected ? (
         <div>
           <p className="text-xs text-muted-foreground">
-            Connect your GitHub account to mirror tasks as issues, see this repo's issues and pull requests here, and use private repos. Conductor acts on GitHub as you.
+            Connect your GitHub account to mirror tasks as issues, see this repo's issues and pull requests here, and use private repos. Squadboard acts on GitHub as you.
           </p>
           <Button size="sm" className="mt-2" onClick={connect} disabled={pending === 'connectGithub'} data-testid="connect-github">
             <Github /> Connect GitHub
@@ -130,7 +130,7 @@ export function GithubPanel({ project, tasks, run, act, pending, onOpenTask }: {
             </Button>
           </div>
           <button type="button" onClick={connect} className="text-[11px] text-muted-foreground hover:text-foreground hover:underline">
-            Reconnect GitHub (change which repositories Conductor can use)
+            Reconnect GitHub (change which repositories Squadboard can use)
           </button>
           {project.data.ghSyncError && <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs">{project.data.ghSyncError}</p>}
         </>

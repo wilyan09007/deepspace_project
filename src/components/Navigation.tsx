@@ -80,7 +80,7 @@ export default function Navigation() {
                 <circle cx="18.5" cy="5.5" r="2" fill="currentColor" stroke="none" />
               </svg>
             </span>
-            Conductor
+            Squadboard
           </Link>
 
           <div className="hidden items-center md:flex">{visibleNav.map(navLink)}</div>

@@ -1,5 +1,7 @@
 # Build notes (working memory — read this first on resume)
 
+> The app was renamed **Conductor → Squadboard** (decision #23); older entries below still say Conductor.
+
 Spec: `docs/SPEC.md`. Decisions: `docs/DECISIONS.md` (all owner questions answered; nothing open).
 This file holds the **build plan with live status**. When something doesn't work, the plan is
 edited here (phase table + "Plan changes" log), not just worked around in code.

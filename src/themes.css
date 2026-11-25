@@ -45,7 +45,7 @@
   --color-shell-panel: #ffffff;
 }
 
-/* Console — Conductor's theme: an ink-blue control room with an amber
+/* Console — Squadboard's theme: an ink-blue control room with an amber
  * "on air" signal for anything that needs a human. */
 [data-theme="console"] {
   color-scheme: dark;
@@ -73,7 +73,7 @@
   --shadow-card-hover: 0 4px 14px 0 rgba(0, 0, 0, 0.45);
   --color-shell: #0d131b;
   --color-shell-panel: #111823;
-  /* Conductor status hues (task / agent states). */
+  /* Squadboard status hues (task / agent states). */
   --color-st-ready: #93a1b5;
   --color-st-working: #3fc7c0;
   --color-st-paused: #f2b134;

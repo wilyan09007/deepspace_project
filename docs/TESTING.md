@@ -1,6 +1,6 @@
-# Testing Conductor
+# Testing Squadboard
 
-Live site: **https://conductor.app.space**. Times below are Pacific.
+Live site: **https://squadboard.app.space**. Times below are Pacific.
 
 ## 0. One-time setup (Mac or Linux terminal)
 
@@ -57,7 +57,7 @@ npx deepspace test run all
 
 Against the live site (about 1 minute). Each run creates up to 4 teams as Alice, and the live site allows 20 new teams per person per day, so run it at most about 5 times a day (the count resets at 4 PM Pacific):
 ```bash
-LIVE_URL=https://conductor.app.space npx playwright test -c tests/live.config.ts
+LIVE_URL=https://squadboard.app.space npx playwright test -c tests/live.config.ts
 ```
 
 ## 3. Scheduled tasks on the live site (free)
@@ -80,24 +80,24 @@ The digest runs on its own every day at 2:00 PM Pacific (22:00 UTC); the offline
 ## 4. Be a coding agent from your terminal (free)
 
 ```bash
-npx deepspace agent tools conductor --json
+npx deepspace agent tools squadboard --json
 ```
 ```bash
-npx deepspace agent invoke conductor list_projects --input '{}' --json
+npx deepspace agent invoke squadboard list_projects --input '{}' --json
 ```
 ```bash
-npx deepspace agent invoke conductor register_agent --input '{"project":"gothinkster/react-redux-realworld-example-app","name":"me-test"}' --json
+npx deepspace agent invoke squadboard register_agent --input '{"project":"gothinkster/react-redux-realworld-example-app","name":"me-test"}' --json
 ```
 
 Copy the `agentId` from that reply into the next commands:
 ```bash
-npx deepspace agent invoke conductor next_task --input '{"agent_id":"PASTE_AGENT_ID"}' --json
+npx deepspace agent invoke squadboard next_task --input '{"agent_id":"PASTE_AGENT_ID"}' --json
 ```
 ```bash
-npx deepspace agent invoke conductor check_in --input '{"agent_id":"PASTE_AGENT_ID","status":"working","summary":"Trying Conductor","files":["src/reducer.js"]}' --json
+npx deepspace agent invoke squadboard check_in --input '{"agent_id":"PASTE_AGENT_ID","status":"working","summary":"Trying Squadboard","files":["src/reducer.js"]}' --json
 ```
 
-Keep https://conductor.app.space open on that project's board while you run these: the agent and its task move in real time. Pause it from the board, then run `check_in` again to see the pause arrive.
+Keep https://squadboard.app.space open on that project's board while you run these: the agent and its task move in real time. Pause it from the board, then run `check_in` again to see the pause arrive.
 
 ## 5. Things that use your credits
 
@@ -128,8 +128,8 @@ npx deepspace auth whoami
 1. On a team page, click **connect your GitHub account** under the Add project box and approve on GitHub (**Reconnect GitHub** there or on the board changes which repos it can use).
 2. Add a repo you can write to, then on its board open the **GitHub** panel and turn on **Mirror tasks as GitHub issues**.
 3. Plan a goal (about 13 credits): one labelled issue per task appears on GitHub.
-4. Take a task with the agent commands in section 4, then click **Sync now**: the issue's label changes to `conductor: in progress`.
-5. Open a PR whose description includes `Closes #<issue>` and `Conductor-Task: <task id>` (the issue footer shows both), then **Sync now**: the task card shows the PR. Merging it approves the task, closes the issue and tells agents on the same files to rebase.
+4. Take a task with the agent commands in section 4, then click **Sync now**: the issue's label changes to `squadboard: in progress`.
+5. Open a PR whose description includes `Closes #<issue>` and `Squadboard-Task: <task id>` (the issue footer shows both), then **Sync now**: the task card shows the PR. Merging it approves the task, closes the issue and tells agents on the same files to rebase.
 6. Close any mirrored issue on GitHub and **Sync now**: its task moves to Done.
 
 ## 7. Check the live app

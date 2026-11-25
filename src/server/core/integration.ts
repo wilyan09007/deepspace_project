@@ -2,7 +2,7 @@
  * Integration calls with an explicit payer.
  *
  * The scaffold's ActionTools.integration picks the payer per integration
- * name from src/integrations.ts. Conductor needs the same integration
+ * name from src/integrations.ts. Squadboard needs the same integration
  * (github) billed to different people depending on who triggered the work:
  * the signed-in user when they plan a goal, the app owner for the capped
  * hourly PR refresh. So the payer is chosen per call here, by passing the
