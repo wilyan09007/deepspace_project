@@ -14,6 +14,7 @@ import { prepareDemo, requestStopDemo } from '../server/core/demo'
 import { githubClient } from '../server/core/github'
 import { resetGoalForRetry, runPlanner, type PlannerDeps } from '../server/core/planner'
 import { makeOps, userModel } from '../server/core/runtime'
+import { seedDevFixture } from '../server/core/fixtures'
 import { loadSample, sampleAvailable } from '../server/core/sample'
 import { OpsError } from '../server/core/store'
 
@@ -116,4 +117,10 @@ export const actions: Record<string, ActionHandler<Env>> = {
   sampleStatus: action(async () => ({ available: sampleAvailable() })),
 
   loadSample: action(({ env, userId, params }) => loadSample(makeOps(env, userId), str(params.teamId))),
+
+  /** Dev/test only: a fixed plan for exercising the board without billing. Refused in production. */
+  devSeedFixture: action(async ({ env, userId, params }) => {
+    if (env.ALLOW_DEBUG_ROUTES !== 'true') throw new OpsError('not_found', 'Not available', 404)
+    return seedDevFixture(makeOps(env, userId), str(params.teamId))
+  }),
 }

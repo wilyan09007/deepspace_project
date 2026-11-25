@@ -53,7 +53,6 @@ export default function BoardPage() {
     if (project?.data.kind === 'repo' && tasks.some((t) => t.data.prUrl)) {
       void run('refreshPrs', { projectId }, { quiet: true })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.recordId, tasks.length > 0])
 
   const sortedGoals = useMemo(() => [...goals].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [goals])
@@ -93,7 +92,7 @@ export default function BoardPage() {
               <ExternalLink className="h-4 w-4" />
             </a>
           </h1>
-          {isSample && <p className="mt-0.5 text-xs text-muted-foreground">Sample project: a plan captured from one real planner run. Use the demo agents to see it work.</p>}
+          {isSample && <p className="mt-0.5 text-xs text-muted-foreground">Sample project{project.data.description ? `: ${project.data.description}` : ''} Use the demo agents to see it work.</p>}
         </div>
         <div className="flex flex-wrap gap-2">
           {demoRunning ? (

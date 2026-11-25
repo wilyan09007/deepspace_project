@@ -102,6 +102,20 @@ export default function TeamPage() {
                 </Button>
               </div>
             )}
+            {import.meta.env.DEV && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="mt-3"
+                data-testid="dev-fixture"
+                onClick={async () => {
+                  const res = await run<{ projectId: string }>('devSeedFixture', { teamId })
+                  if (res) navigate(`/t/${teamId}/p/${res.projectId}`)
+                }}
+              >
+                Load test fixture (dev only)
+              </Button>
+            )}
           </Panel>
 
           <Panel title="Daily digests">
