@@ -44,6 +44,8 @@ export function makeOps(env: Env, userId: string, payerJwt?: string, identityJwt
     // The user's own GitHub connection when they have one (private repos), else the public reader.
     github: payerJwt ? preferUserGithub(userGithub(env, payerJwt), githubClient(env, { kind: 'user', jwt: payerJwt })) : undefined,
     self: profileFromVerifiedJwt(identityJwt ?? payerJwt),
+    // Never true in production: only `deepspace dev` / `deepspace test` set ALLOW_DEBUG_ROUTES.
+    relaxedLimits: env.ALLOW_DEBUG_ROUTES === 'true',
   })
 }
 

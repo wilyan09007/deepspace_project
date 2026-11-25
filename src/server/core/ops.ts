@@ -265,6 +265,8 @@ export interface OpsContext {
    * action can arrive before it exists.
    */
   self?: { name?: string; email?: string; image?: string }
+  /** Local dev/test only (ALLOW_DEBUG_ROUTES): multiply rate limits by 100 so repeated test runs don't trip them. */
+  relaxedLimits?: boolean
 }
 
 /** What an agent sees about one overlap. */
@@ -310,6 +312,7 @@ export class Ops {
   private readonly clock: () => number
   private readonly github?: GitHubClient
   private readonly self?: OpsContext['self']
+  private readonly limitScale: number
   private nameCache = new Map<string, string>()
 
   constructor(ctx: OpsContext) {
@@ -318,6 +321,7 @@ export class Ops {
     this.clock = ctx.now ?? Date.now
     this.github = ctx.github
     this.self = ctx.self
+    this.limitScale = ctx.relaxedLimits ? 100 : 1
   }
 
   now(): number {
@@ -380,6 +384,7 @@ export class Ops {
     const key = `${bucket}:${subject}:${windowKey}`
     const [row] = await this.store.query<{ key: string; count: number }>('usage_counters', { key })
     const count = row?.data.count ?? 0
+    limit *= this.limitScale
     if (count >= limit) {
       throw new OpsError('rate_limited', `Limit reached (${limit} per ${windowKey.length > 10 ? 'hour' : 'day'}). Try again later.`, 429)
     }
@@ -479,7 +484,7 @@ export class Ops {
     } catch (e) {
       const status = (e as { status?: number }).status
       if (status === 404 || status === 403) {
-        throw new OpsError('repo_not_found', `Couldn't find a public repository ${ref.owner}/${ref.repo}`, 404)
+        throw new OpsError('repo_not_found', `Couldn't find ${ref.owner}/${ref.repo}. If it's private, connect your GitHub account first (link below the box).`, 404)
       }
       throw e
     }

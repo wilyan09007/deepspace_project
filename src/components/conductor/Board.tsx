@@ -131,7 +131,8 @@ export function TaskDetail({ task, agent, deps, run, onClose }: { task: Rec<Task
           <StatusText status={task.data.status} /> {agent && <>· {agent.data.name}</>} · updated {timeAgo(task.updatedAt)}
         </Modal.Description>
       </Modal.Header>
-      <Modal.Body className="max-h-[70vh] space-y-4 overflow-y-auto text-sm" data-testid="task-detail">
+      <Modal.Body className="max-h-[70vh] overflow-y-auto text-sm">
+        <div className="space-y-4" data-testid="task-detail">
         {(issue || pr) && (
           <div className="flex flex-wrap gap-2">
             {issue && (
@@ -229,6 +230,7 @@ export function TaskDetail({ task, agent, deps, run, onClose }: { task: Rec<Task
               ))}
             </ol>
           )}
+        </div>
         </div>
       </Modal.Body>
     </Modal>

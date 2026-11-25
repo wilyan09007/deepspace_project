@@ -147,3 +147,68 @@ test('new goal: the button opens the dialog, planning starts, and its outcome sh
   await expect(page.getByTestId('goal-header').getByRole('button', { name: 'Retry' })).toBeVisible()
   await expect(page.getByTestId('activity-feed')).toContainText('set a goal: Add a dark mode toggle')
 })
+
+test('review gate: submitted work waits in Review; approve from the inbox, send back from the task', async ({ users }) => {
+  test.skip(!!process.env.LIVE_URL, 'Local only (uses the dev fixture)')
+  test.setTimeout(240_000)
+  const [alice, bob] = await users(['Alice', 'Bob'])
+  const teamId = await createTeam(alice!, `Review ${Date.now().toString(36)}`)
+  await bob!.page.goto(await invite(alice!))
+  await expect(bob!.page).toHaveURL(new RegExp(`/t/${teamId}$`), { timeout: 20_000 })
+  await alice!.page.getByTestId('dev-fixture').click()
+  await expect(alice!.page.getByTestId('task-card')).toHaveCount(5, { timeout: 20_000 })
+  const board = new URL(alice!.page.url()).pathname
+  await alice!.page.getByTestId('start-demo').click()
+
+  // Answer the demo's question so agents can finish; wait for two submissions.
+  const review = alice!.page.getByRole('region', { name: 'Review' })
+  const answer = alice!.page.getByPlaceholder('Your answer')
+  await expect(async () => {
+    if (await answer.isVisible()) {
+      await answer.fill('Keep the default.')
+      await alice!.page.getByTestId('questions-list').getByRole('button', { name: 'Answer', exact: true }).click()
+    }
+    await expect(review.getByTestId('task-card')).toHaveCount(2, { timeout: 3_000 })
+  }).toPass({ timeout: 180_000 })
+  await alice!.page.getByTestId('stop-demo').click()
+
+  // Bob's inbox shows the reviews (and the nav badge counts them); he approves one there.
+  await bob!.page.goto('/inbox')
+  await expect(bob!.page.getByTestId('inbox-count')).toBeVisible()
+  const first = bob!.page.getByTestId('inbox-review').first()
+  const approvedTitle = (await first.getByRole('link').first().innerText()).trim()
+  await first.getByRole('button', { name: 'Approve' }).click()
+  await expect(alice!.page.getByRole('region', { name: 'Done' })).toContainText(approvedTitle, { timeout: 15_000 })
+
+  // Alice sends the other back from the task itself, with a note; it returns to Ready showing the note and its history.
+  await review.getByTestId('task-card').first().click()
+  const detail = alice!.page.getByTestId('task-detail')
+  await expect(detail.getByTestId('task-history')).toContainText('submitted')
+  await detail.getByRole('button', { name: 'Request changes' }).click()
+  await detail.getByLabel('What should change?').fill('Add a test for the empty state.')
+  await detail.getByRole('button', { name: 'Send back' }).click()
+  await expect(alice!.page.getByRole('region', { name: 'Ready' })).toContainText('Changes requested: Add a test for the empty state.', { timeout: 15_000 })
+
+  // Deep link (as used in GitHub issue footers) opens a task directly.
+  const anyCard = alice!.page.getByTestId('task-card').first()
+  await anyCard.click()
+  const taskUrl = alice!.page.url()
+  expect(taskUrl).toContain('?task=')
+  await bob!.page.goto(taskUrl.replace(/^https?:\/\/[^/]+/, ''))
+  await expect(bob!.page.getByTestId('task-detail')).toBeVisible({ timeout: 15_000 })
+  expect(board).toBeTruthy()
+})
+
+test('github panel: offered on repo projects (connect first), not on samples', async ({ users }) => {
+  test.skip(!!process.env.LIVE_URL, 'Local only (uses the dev fixture)')
+  const [alice] = await users(['Alice'])
+  const teamId = await createTeam(alice!, `GH ${Date.now().toString(36)}`)
+  await alice!.page.getByTestId('dev-repo-fixture').click()
+  await expect(alice!.page.getByTestId('github-section')).toBeVisible({ timeout: 20_000 })
+  // Test accounts have no GitHub connection.
+  await expect(alice!.page.getByTestId('connect-github')).toBeVisible({ timeout: 20_000 })
+  await alice!.page.goto(`/t/${teamId}`)
+  await alice!.page.getByTestId('dev-fixture').click()
+  await expect(alice!.page.getByTestId('task-card')).toHaveCount(5, { timeout: 20_000 })
+  await expect(alice!.page.getByTestId('github-section')).toHaveCount(0)
+})

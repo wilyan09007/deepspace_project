@@ -21,9 +21,15 @@ export default function TeamPage() {
   const [invite, setInvite] = useState<{ code: string; expiresAt: number } | null>(null)
   const [sampleReady, setSampleReady] = useState(false)
 
+  const [github, setGithub] = useState<boolean | null>(null)
   useEffect(() => {
     run<{ available: boolean }>('sampleStatus', {}, { quiet: true }).then((r) => setSampleReady(!!r?.available))
+    run<{ connected: boolean }>('githubStatus', {}, { quiet: true }).then((r) => setGithub(!!r?.connected))
   }, [run])
+  async function connectGithub() {
+    const r = await run<{ url: string }>('connectGithub', { returnTo: `/t/${teamId}` })
+    if (r?.url) window.location.href = r.url
+  }
 
   const team = teams[0]
   const active = members.filter((m) => m.data.status !== 'removed')
@@ -91,7 +97,19 @@ export default function TeamPage() {
                 {pending === 'createProject' ? 'Checking repo…' : 'Add project'}
               </Button>
             </form>
-            <p className="mt-2 text-xs text-muted-foreground">Public repositories only. Checking the repo uses a tiny amount of your DeepSpace credits.</p>
+            <p className="mt-2 text-xs text-muted-foreground" data-testid="repo-access-note">
+              {github ? (
+                'Your GitHub account is connected, so private repositories you can access work too. Checking the repo uses a tiny amount of your DeepSpace credits.'
+              ) : (
+                <>
+                  Public repositories, or{' '}
+                  <button type="button" className="text-primary hover:underline" onClick={connectGithub} data-testid="team-connect-github">
+                    connect your GitHub account
+                  </button>{' '}
+                  for private ones (Conductor then reads and writes GitHub as you). Checking the repo uses a tiny amount of your DeepSpace credits.
+                </>
+              )}
+            </p>
             {sampleReady && (
               <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-dashed border-border p-3">
                 <p className="text-xs text-muted-foreground">
