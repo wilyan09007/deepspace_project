@@ -13,7 +13,7 @@
  */
 
 import type { Context, Hono } from 'hono'
-import { createUIMessageStreamResponse, toUIMessageStream, type ModelMessage } from 'ai'
+import { createUIMessageStream, createUIMessageStreamResponse, toUIMessageStream, type ModelMessage } from 'ai'
 import {
   deepSpaceAgentErrorSummary,
   prepareMessagesWithCompaction,
@@ -23,7 +23,6 @@ import {
   turnsToCoreMessages,
   buildUiParts,
   makeDefaultSummarizer,
-  createUserToolExecutor,
   DEFAULT_CONTEXT_CONFIG,
   getChat,
   createChat,
@@ -33,17 +32,17 @@ import {
   appendMessage,
   loggableError,
 } from 'deepspace/worker'
-import type { AgentToolAccessResult, AgentToolRouteOptions, ChatTurn } from 'deepspace/worker'
-import { schemas } from '../schemas.js'
-import { buildSystemPrompt } from './tools.js'
+import type { AgentToolAccessResult, ChatTurn } from 'deepspace/worker'
+import { ASSISTANT_MAX_CHARS, ASSISTANT_MAX_TOOL_CALLS, ASSISTANT_MESSAGES_PER_HOUR, GUARD_MODEL } from '../server/core/config.js'
+import { makeOps, userModel } from '../server/core/runtime.js'
+import { OpsError } from '../server/core/store.js'
+import { buildAssistantPrompt, buildAssistantTools, hourKey, screenMessage } from './assistant.js'
 // Type-only — TypeScript strips these at runtime, so no circular import
 // with worker.ts (which imports `registerAiChatRoutes` from this file).
 import type { Env, AppContext } from '../../worker.js'
 
 type ResolveAccess = (req: Request, env: Env) => Promise<AgentToolAccessResult>
 type AccessGrant = Extract<AgentToolAccessResult, { ok: true }>
-/** `buildTools` from src/ai/tools.ts; it may ignore the context argument. */
-type ToolFactory = AgentToolRouteOptions<Env>['buildTools']
 
 function recordRoomStub(env: Env): DurableObjectStub {
   // Rooms are keyed by the immutable app id — the same `app:${DEEPSPACE_APP_ID}`
@@ -68,11 +67,7 @@ function deriveTitle(content: string): string {
   return first.length <= 50 ? first : first.slice(0, 47).trimEnd() + '…'
 }
 
-export function registerAiChatRoutes(
-  app: Hono<AppContext>,
-  resolveAccess: ResolveAccess,
-  buildTools: ToolFactory,
-): void {
+export function registerAiChatRoutes(app: Hono<AppContext>, resolveAccess: ResolveAccess): void {
   // One chokepoint for the access-decision → HTTP mapping on every chat route.
   const requireAccess = async (c: Context<AppContext>): Promise<AccessGrant | Response> => {
     const access = await resolveAccess(c.req.raw, c.env)
@@ -179,11 +174,24 @@ export function registerAiChatRoutes(
       )
     }
 
+    // Guardrail layer 1: limits, before any model call.
+    if (content.length > ASSISTANT_MAX_CHARS) {
+      return c.text(`Please keep messages under ${ASSISTANT_MAX_CHARS} characters.`, 413)
+    }
+
     const stub = recordRoomStub(c.env)
     const chat = await getChat(stub, chatId, auth.userId)
     if (!chat) {
       console.warn('[ai-chat] REQUEST chat-not-found', { userId: auth.userId, chatId })
       return c.json({ error: 'Chat not found' }, 404)
+    }
+
+    const ops = makeOps(c.env, auth.userId)
+    try {
+      await ops.bump('assistant', ASSISTANT_MESSAGES_PER_HOUR, hourKey(Date.now()))
+    } catch (e) {
+      if (e instanceof OpsError) return c.text(`You've sent ${ASSISTANT_MESSAGES_PER_HOUR} messages this hour. Please wait a bit.`, 429)
+      throw e
     }
 
     // Load history before writing this turn. `persistTurn` later writes user then
@@ -208,6 +216,35 @@ export function registerAiChatRoutes(
     // orphan user from history would survive the loop (no following user in
     // raw history) and then sit next to the in-flight user, sending two
     // consecutive user messages to the LLM.
+    // Guardrail layer 2: a cheap topic/injection check (billed to the user).
+    // A refused message never reaches the main model; the refusal is saved
+    // like a normal turn so the conversation reads correctly.
+    const previousAssistant = [...rawTurns].reverse().find((t) => t.role === 'assistant')?.content ?? ''
+    const screen = await screenMessage(content, previousAssistant, userModel(c.env, jwt, GUARD_MODEL))
+    if (!screen.allowed) {
+      console.info(`[ai-chat] refused (${screen.reason}) caller=${auth.userId}`)
+      const refusalId = `asst-${Date.now()}-${crypto.randomUUID()}`
+      try {
+        if (await appendMessage(stub, { id: userMessageId, chatId, userId: auth.userId, role: 'user', content })) {
+          await appendMessage(stub, { id: refusalId, chatId, userId: auth.userId, role: 'assistant', content: screen.reply })
+        }
+      } catch (err) {
+        console.error(`[ai-chat] refusal persist failed: ${loggableError(err)}`)
+      }
+      return createUIMessageStreamResponse({
+        headers: { 'X-Asst-Id': refusalId },
+        stream: createUIMessageStream({
+          execute: ({ writer }) => {
+            writer.write({ type: 'start', messageId: refusalId })
+            writer.write({ type: 'text-start', id: 'refusal' })
+            writer.write({ type: 'text-delta', id: 'refusal', delta: screen.reply })
+            writer.write({ type: 'text-end', id: 'refusal' })
+            writer.write({ type: 'finish' })
+          },
+        }),
+      })
+    }
+
     const allTurns: ChatTurn[] = [...rawTurns, { id: userMessageId, role: 'user', content }]
     const turns: ChatTurn[] = []
     for (let i = 0; i < allTurns.length; i++) {
@@ -240,7 +277,8 @@ export function registerAiChatRoutes(
       provider: selectedModel.provider,
       modelId: usedModelId,
     }
-    const baseSystem = buildSystemPrompt(c.env.APP_NAME, schemas)
+    // Guardrail layer 3: a narrow prompt that treats record text as data.
+    const baseSystem = buildAssistantPrompt(await ops.userName())
 
     // Compaction inserts at most one summary system message at index 0; fold
     // it into the top-level `system` so we don't pass two system roles. Then
@@ -257,10 +295,10 @@ export function registerAiChatRoutes(
     // mid-stream. The local assistant routes use the same executor and
     // context, and streamDeepSpaceAgent caps each tool result for the model,
     // keeping both surfaces' tool behavior identical.
-    const tools = buildTools(
-      createUserToolExecutor(c.env, auth.userId, c.req.raw.signal, { room: access.room }),
-      { env: c.env, userId: auth.userId, request: c.req.raw },
-    )
+    // Guardrail layer 4: Conductor's own scoped tools only (no raw record
+    // tools); each re-checks team membership, and steering needs a confirmed
+    // proposal (src/ai/assistant.ts).
+    const tools = buildAssistantTools(ops, content)
 
     // Allocate the assistant row id BEFORE streaming starts so we can echo it
     // back via a response header. The client tags its in-flight overlay with
@@ -355,6 +393,7 @@ export function registerAiChatRoutes(
       instructions: systemText,
       messages,
       tools,
+      maxToolCalls: ASSISTANT_MAX_TOOL_CALLS,
       // Cancel provider and tool work with the request. `onAbort` then saves
       // any completed steps; a zero-step abort saves nothing.
       abortSignal: c.req.raw.signal,

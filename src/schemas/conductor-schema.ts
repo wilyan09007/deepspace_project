@@ -253,6 +253,13 @@ export const conductorSchemas: CollectionSchema[] = [
     permissions: TEAM_READ_ONLY,
   },
   {
+    // The assistant's pending action awaiting the user's explicit "yes" (one per user).
+    name: 'assistant_proposals',
+    columns: [text('userId'), text('agentId'), text('kind'), text('text'), text('summary'), num('expiresAt')],
+    uniqueOn: ['userId'],
+    permissions: SERVER_ONLY,
+  },
+  {
     // Rate-limit counters: key = `<bucket>:<subject>:<window>`.
     name: 'usage_counters',
     columns: [text('key'), num('count')],

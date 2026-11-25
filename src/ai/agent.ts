@@ -91,7 +91,9 @@ function createAccessResolver(options: RegisterAgentOptions, resolveIdentity: ty
  */
 export function registerAgent(app: Hono<AppContext>, options: RegisterAgentOptions): void {
   if (options.inApp !== false) {
-    registerAiChatRoutes(app, createAccessResolver(options, resolveAuth), options.tools)
+    // The website assistant gets its own guarded tool set (src/ai/assistant.ts),
+    // not the agent tools.
+    registerAiChatRoutes(app, createAccessResolver(options, resolveAuth))
   }
   if (options.local !== false) {
     registerAgentToolRoutes(app, {

@@ -31,7 +31,7 @@ Status: ✅ done · 🔨 in progress · ⬜ not started · ⚠️ changed (see P
 | 4 | Planner (`planner.ts`) | tree+readme → Claude (user JWT) → `validatePlan` → import edges from ≤12 files → tasks written; stages written to `goal.planStage`; failure sets `planError`; unit-tested with stubbed AI/GitHub | ✅ 7 tests |
 | 5 | Wiring: export `createActionTools`; server actions; agent tools (`buildTools`); JobRoom locked to admins | type-check passes; each action/tool is a thin wrapper over ops | ✅ (live-verified in phase 9/10) |
 | 6 | Demo job + cron (stale sweep, daily digest) | demo script drives 3 agents through ops incl. 1 overlap, 1 question, obeys directives; digest is AI-free; email capped | ✅ 6 tests |
-| 7 | Assistant (ai-chat feature + guardrails) | separate assistant tool set; guard classifier; server-enforced confirmation; red-team prompts file; guard parsing unit-tested | ⬜ |
+| 7 | Assistant (ai-chat feature + guardrails) | separate assistant tool set; guard classifier; server-enforced confirmation; red-team prompts file; guard parsing unit-tested | ✅ 10 tests; live red-team run is phase 10 |
 | 8 | UI | landing, teams, join, team page, board (goals, tasks, agents, overlaps, questions, activity, directives), connect page, assistant drawer, own theme | ⬜ |
 | 9 | Local run | `deepspace dev start` boots; core loop clicked through in a browser with Playwright (no billed calls: sample plan + demo) | ⬜ |
 | 10 | Live | first deploy (latches GitHub source), capture one real plan for the sample (user-billed, cents), live smoke, red-team set once | ⬜ |
@@ -39,6 +39,12 @@ Status: ✅ done · 🔨 in progress · ⬜ not started · ⚠️ changed (see P
 
 ## Plan changes (newest first)
 
+- **Phase 7:** confirmation is enforced with a server-side stored proposal (`assistant_proposals`,
+  one per user, 5-minute expiry): the first `send_directive` call only stores a proposal; it runs
+  only when the *whole* next user message is a confirmation and the arguments match. The guard sees
+  the previous assistant message so short follow-ups ("agent 2") aren't refused; trivial small talk
+  skips the guard; guard errors fail closed. Refusals are streamed and saved as normal turns.
+  `buildTools` now returns only agent tools; the assistant's tools live in `src/ai/assistant.ts`.
 - **Phases 3–6 notes:** tests found and fixed two real bugs — the agent that loses a claim race was
   told tasks were "waiting on dependencies" (stale snapshot), and a reassigned agent's next check-in
   said "no task" instead of "your task was reassigned". `createActionTools` moved to
