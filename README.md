@@ -22,10 +22,21 @@ overlaps, and lets anyone on the team steer any agent from one live board.
    Nothing is blocked; humans can acknowledge or resolve the warning.
 4. **Humans steer.** Pause, resume, take a task back, or send a note to any agent; answer questions
    agents ask. Agents receive it on their next check-in. Changes show up live for the whole team.
-5. **Finish with a PR.** Agents complete tasks with a pull-request link; its open/merged/closed state
-   shows on the board.
-6. **Daily digest** on the team page: what finished, what was planned, questions, overlaps and steering, written from the day's activity (no AI). Posted at 22:00 UTC or whenever someone clicks **Generate today's digest**; **Email me** sends one to your own inbox.
-7. **An assistant that stays on topic.** "What is each agent doing?" It answers from your board only,
+5. **Review gate.** When an agent finishes, the task waits in **Review** until a teammate clicks
+   **Approve**, or **Request changes** with a note. A merged PR also counts as approval. A sent-back
+   task goes to the same agent first, with the reviewer's note and the task's full history.
+6. **GitHub sync.** Connect your GitHub account (private repos work too) and turn on **Mirror tasks as
+   GitHub issues**: every task becomes an issue labelled `conductor` + its status, closed when done.
+   The board lists the repo's open issues (**Plan as goal**) and PRs; a PR whose description says
+   `Closes #<issue>` or `Conductor-Task: <id>` is linked to its task, and merging it approves the task.
+   Closing a mirrored issue on GitHub finishes the task. Every card links its issue and PR.
+7. **Inbox.** One page per person: tasks waiting for review, agent questions, your agents that are
+   paused, blocked or offline holding a task, and overlaps involving your agents, with a count in the nav.
+8. **Keeping work moving.** When a PR merges, agents working on files it changed get a "pull and
+   rebase" note (merge alerts). A task held by an agent that's been offline for 2+ hours goes back to
+   Ready with its history, so someone else can pick it up.
+9. **Daily digest** on the team page: what finished, what was planned, questions, overlaps and steering, written from the day's activity (no AI). Posted at 22:00 UTC or whenever someone clicks **Generate today's digest**; **Email me** sends one to your own inbox.
+10. **An assistant that stays on topic.** "What is each agent doing?" It answers from your board only,
    refuses everything else, and never steers an agent without your explicit "yes".
 
 **Try it without connecting anything:** create a team, click **Load sample** (a plan captured from a
@@ -66,6 +77,7 @@ set up, and nothing bills the app owner.
 | Planning a goal (GitHub reads + one Claude Sonnet call) | the user who plans | ~13 credits ($0.13) on a mid-size repo |
 | Assistant message | the user chatting | the 18-message red-team run cost 42 credits in all (10 refused by the cheap guard, 8 answered by Sonnet with lookups) |
 | Adding a project, PR status refresh (max once per 10 min per project) | the user | < 1 credit |
+| GitHub sync (mirroring issues, reading issues/PRs) through your own GitHub connection | the user who opens the board / clicks | ~0.05¢ per GitHub call; a full live test of 68 calls cost $0.02 |
 | Demo agents, sample plan, board, agent tools | nobody | free |
 | Daily digest (scheduled or generated) | nobody (written without AI) | free |
 | **Email me** a digest | the user who clicks it | ~1.3¢ per email (platform email fee), 5/day per user |
@@ -112,10 +124,12 @@ src/server/core/engine.ts         pure: task ranking, overlap detection, import 
 src/server/core/planner.ts        repo → Claude → validated plan → tasks
 src/server/core/demo.ts           scripted demo agents (same ops as real agents)
 src/server/core/digest.ts         AI-free daily digest + capped emails
+src/server/core/github-sync.ts    issue mirroring, reading issues/PRs back, PR linking, plan from issue
+src/server/core/github-user.ts    GitHub through each user's own connection (Composio)
 src/ai/agent-tools.ts             tools for local coding agents
 src/ai/assistant.ts               assistant guard, prompt, scoped tools, confirmation
 src/actions/index.ts              server actions used by the UI
-src/pages/(app)/(protected)/      teams, team page, board, connect page
+src/pages/(app)/(protected)/      teams, team page, board, connect page, inbox
 ```
 
 Decisions and the build plan: [`docs/DECISIONS.md`](docs/DECISIONS.md),
@@ -126,7 +140,7 @@ Decisions and the build plan: [`docs/DECISIONS.md`](docs/DECISIONS.md),
 ```bash
 npm install                     # npm 11.6+ required
 npx deepspace dev start         # local app at http://localhost:5173
-npx vitest run                  # 83 unit tests (engine, ops, planner, demo, digest, assistant, parsers, timing)
+npx vitest run                  # 95 unit tests (engine, ops, planner, demo, digest, assistant, GitHub sync, timing)
 npx deepspace test run all      # unit + browser tests against a local server
 LIVE_URL=https://conductor.app.space npx playwright test -c tests/live.config.ts   # browser tests against the live app
 node scripts/redteam.mjs        # red-team the live assistant (billed to you; run `npx deepspace auth whoami` first)
@@ -141,7 +155,8 @@ Step-by-step commands for testing everything, including the live site and schedu
 
 ## Limits
 
-- Public GitHub repositories only (the platform's GitHub integration).
+- Without a connected GitHub account, public repositories only. GitHub sync runs when a member opens
+  the board or clicks Sync (never on a schedule), so issue labels can lag until someone does.
 - Overlaps come from predicted files plus files agents report in check-ins; import links are read
   from up to 12 predicted JS/TS/Python files per plan.
 - Agents connect through the DeepSpace CLI; there's no standalone MCP token for other clients yet.

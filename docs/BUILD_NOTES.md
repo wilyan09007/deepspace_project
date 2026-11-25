@@ -42,15 +42,15 @@ Status: ✅ done · 🔨 in progress · ⬜ not started · ⚠️ changed (see P
 
 | # | Phase | Done when | Status |
 |---|-------|-----------|--------|
-| 12 | GitHub connection + client | user connects GitHub (Composio, hosted consent); all GitHub reads go through the caller's connection when present (private repos), else the public reader; Composio calls carry the app identity headers | ⬜ |
-| 13 | Issue mirroring | per-project "Mirror tasks as issues" toggle (requires push access); planning creates one issue per task; status pushed as labels + footer line; done → closed | ⬜ |
-| 14 | Reading GitHub back | Sync (board open, throttled 2 min, + button): open issues and PRs stored in `github_items`; PRs linked to tasks by `Conductor-Task: <id>` / `Closes #N`; merged PR → task done; closed issue → task done; "Plan from issue" | ⬜ |
-| 15 | Review gate | complete_task → Review; humans Approve → Done or Request changes → Ready with the note; merged PR counts as approval | ⬜ |
-| 16 | Handoff history | task timeline in the card; next_task gives a returning/reassigned task's history | ⬜ |
-| 17 | Merge alerts | task's PR merged → agents on overlapping files get a "pull/rebase" note | ⬜ |
-| 18 | Auto-release | stale sweep: agent offline 2 h holding a task → task back to Ready with a note | ⬜ |
-| 19 | Needs-you inbox | /inbox: open questions, reviews waiting, overlaps and stuck tasks involving your agents; nav badge | ⬜ |
-| 20 | Tests, docs, live check | unit + e2e for all of the above; owner connects GitHub; live mirror on deepspace_project; test issues closed | ⬜ |
+| 12 | GitHub connection + client | user connects GitHub (Composio, hosted consent); all GitHub reads go through the caller's connection when present (private repos), else the public reader; Composio calls carry the app identity headers | ✅ |
+| 13 | Issue mirroring | per-project "Mirror tasks as issues" toggle (requires push access); planning creates one issue per task; status pushed as labels + footer line; done → closed | ✅ |
+| 14 | Reading GitHub back | Sync (board open, throttled 2 min, + button): open issues and PRs stored in `github_items`; PRs linked to tasks by `Conductor-Task: <id>` / `Closes #N`; merged PR → task done; closed issue → task done; "Plan from issue" | ✅ |
+| 15 | Review gate | complete_task → Review; humans Approve → Done or Request changes → Ready with the note; merged PR counts as approval | ✅ |
+| 16 | Handoff history | task timeline in the card; next_task gives a returning/reassigned task's history | ✅ |
+| 17 | Merge alerts | task's PR merged → agents on overlapping files get a "pull/rebase" note | ✅ |
+| 18 | Auto-release | stale sweep: agent offline 2 h holding a task → task back to Ready with a note | ✅ |
+| 19 | Needs-you inbox | /inbox: open questions, reviews waiting, overlaps and stuck tasks involving your agents; nav badge | ✅ |
+| 20 | Tests, docs, live check | unit + e2e for all of the above; owner connects GitHub; live mirror on deepspace_project; test issues closed | ✅ |
 
 GitHub formats (so Conductor can read them back):
 - Issue body: task text, **Done when**, **Likely files**, **Depends on** (#numbers), then a footer:
@@ -59,6 +59,20 @@ GitHub formats (so Conductor can read them back):
 - PR body (agents are told to add): `Closes #<issue>` and `Conductor-Task: <taskId>`.
 
 ## Plan changes (newest first)
+
+- **Part 2 built and verified live (2026-11-24 evening, Pacific):** owner connected GitHub; on the private
+  `wilyan09007/deepspace_project` repo Conductor added the project, created the `conductor` labels,
+  planned a goal into 2 tasks and mirrored them as issues #1 and #2 (by the owner's account, with
+  footer and "Depends on: #1"); a CLI agent taking #1 moved its label to in progress; approving
+  closed #1 as completed; closing #2 on GitHub marked its task done; a real draft PR #3 with
+  `Closes #1` / `Conductor-Task:` was linked, then closed unmerged. Leftover: branch
+  `conductor-test/pr-link` (this environment can only push to its working branch). Mirroring left
+  ON for the owner to try. Credits 416/500.
+- Bugs found while building part 2: a sent-back task could be grabbed by any agent (now held for the
+  agent that did it while it's online); the demo idled when remaining tasks waited on review (now
+  stops and says so); the old public-only check rejected readable private repos (removed); no way to
+  connect GitHub before a private project existed (connect link on the team page). Rate limits are
+  ×100 when `ALLOW_DEBUG_ROUTES=true` (local dev/test only) so repeated test runs don't trip them.
 
 - **Decision #18 (owner chose option 3):** digest emails are on demand ("Email me", sent only to the
   caller's own address, billed to them, 5/day) plus a free "Generate today's digest" button. The
