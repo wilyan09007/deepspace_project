@@ -22,7 +22,8 @@ Open items at the bottom are waiting on the owner.
 
 | # | Question | Recommendation |
 |---|----------|----------------|
-| A | Who pays for AI planning and digests? | App owner pays, capped per user per day, so reviewers need no credits |
+| A | Who pays for AI planning and digests? | Revised after owner said their credits are capped: each user pays for AI they trigger (planning, assistant) with their own DeepSpace credits; owner pays only a small capped daily digest; demo and sample cost nothing. See BUILD_NOTES "Who pays" |
+| E | In-app assistant guardrails (owner asked for off-topic refusal and red-team hardening) | Guard classifier + narrow prompt + untrusted-data rule + scoped tools + red-team test set. See BUILD_NOTES |
 | B | How do teammates join a team? | Invite link with a one-time code |
 | C | Daily digest channel | Email (built-in `email/send`, no setup per team); Slack later |
 | D | In-app assistant ("what is agent X doing?") using the same tools | Yes, after the core loop works |
