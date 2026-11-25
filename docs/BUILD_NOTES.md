@@ -38,6 +38,26 @@ Status: ✅ done · 🔨 in progress · ⬜ not started · ⚠️ changed (see P
 | 10 | Live | first deploy (latches GitHub source), capture one real plan for the sample (user-billed, cents), live smoke, red-team set once | ✅ https://conductor.app.space; 3 live browser tests; CLI agent loop; red-team 18/18 |
 | 11 | Docs | README (what, how to connect an agent, billing, guardrails, limits), decision log final | ✅ |
 
+## Build plan, part 2 (decisions #19–#22) — status
+
+| # | Phase | Done when | Status |
+|---|-------|-----------|--------|
+| 12 | GitHub connection + client | user connects GitHub (Composio, hosted consent); all GitHub reads go through the caller's connection when present (private repos), else the public reader; Composio calls carry the app identity headers | ⬜ |
+| 13 | Issue mirroring | per-project "Mirror tasks as issues" toggle (requires push access); planning creates one issue per task; status pushed as labels + footer line; done → closed | ⬜ |
+| 14 | Reading GitHub back | Sync (board open, throttled 2 min, + button): open issues and PRs stored in `github_items`; PRs linked to tasks by `Conductor-Task: <id>` / `Closes #N`; merged PR → task done; closed issue → task done; "Plan from issue" | ⬜ |
+| 15 | Review gate | complete_task → Review; humans Approve → Done or Request changes → Ready with the note; merged PR counts as approval | ⬜ |
+| 16 | Handoff history | task timeline in the card; next_task gives a returning/reassigned task's history | ⬜ |
+| 17 | Merge alerts | task's PR merged → agents on overlapping files get a "pull/rebase" note | ⬜ |
+| 18 | Auto-release | stale sweep: agent offline 2 h holding a task → task back to Ready with a note | ⬜ |
+| 19 | Needs-you inbox | /inbox: open questions, reviews waiting, overlaps and stuck tasks involving your agents; nav badge | ⬜ |
+| 20 | Tests, docs, live check | unit + e2e for all of the above; owner connects GitHub; live mirror on deepspace_project; test issues closed | ⬜ |
+
+GitHub formats (so Conductor can read them back):
+- Issue body: task text, **Done when**, **Likely files**, **Depends on** (#numbers), then a footer:
+  `---` / `Conductor status: In progress` / `[Open in Conductor](…)` / `<!-- conductor:task=<taskId> -->`.
+  Labels: `conductor` and `conductor: <status>`.
+- PR body (agents are told to add): `Closes #<issue>` and `Conductor-Task: <taskId>`.
+
 ## Plan changes (newest first)
 
 - **Decision #18 (owner chose option 3):** digest emails are on demand ("Email me", sent only to the

@@ -26,6 +26,10 @@ Open items at the bottom are waiting on the owner.
 | 16 | ~~Digest **emails are the one owner-paid cost**: opt-in per member, at most 3 per day (about 1.3¢ each, so at most ~$1.20/month) | Agent, reconciling #11 with #14 | Scheduled jobs can only bill the owner. Owner can switch emails off by setting the cap to 0 (`DIGEST_EMAIL_DAILY_CAP` in `src/server/core/config.ts`)~~ Superseded by #18 |
 | 17 | PR status is refreshed **when a member opens the board** (user-billed, at most once per 10 minutes per project), not by an owner-paid hourly job | Agent, following #11 | Replaces the hourly `pr-refresh` cron in the earlier plan |
 | 18 | **Digest emails are on demand and paid by the clicker.** Each digest on the team page has an "Email me" button that sends it to the clicker's own address, billed to their credits (5/day limit). A free "Generate today's digest" button builds it any time. Replaces #16: nothing in the app bills the owner | Owner | Answered 2026-11-25 (option 3). The scheduled 22:00 UTC digest still posts to the team page, free |
+| 19 | **GitHub sync:** mirror each task as a GitHub issue (labelled `conductor` + its status, a machine-readable footer, closed when done), read issues and PRs back onto the board, and link issue/PR on every card | Owner | 2026-11-25. Writes go through each user's own GitHub connection (Composio), acting as and billed to that user (~0.05¢ per GitHub call) |
+| 20 | **Private repos** work for users who connect GitHub (all reads use their own connection); without a connection, public repos only as before | Agent, following #19 | The test repo `wilyan09007/deepspace_project` is private |
+| 21 | Build: needs-you inbox, review gate, task handoff history, merge alerts, auto-release of tasks held by agents offline 2+ hours | Owner | 2026-11-25. Not now: manual task control, branch conventions, human-PR overlap |
+| 22 | GitHub sync runs when a member acts (plans a goal, opens the board, clicks Sync), billed to them; nothing syncs on a schedule (that would bill the owner, decision #11) | Agent, following #11 | Status labels on GitHub can lag until someone opens the board |
 
 ## Open — waiting on the owner
 
